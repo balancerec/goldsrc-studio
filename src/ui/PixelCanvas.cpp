@@ -17,14 +17,14 @@ void PixelCanvas::updateCanvasSize(){
 void PixelCanvas::notifyHistory(){if(historyChanged)historyChanged(canUndo(),canRedo());}
 void PixelCanvas::setImage(const QImage& image){
  image_=image.isNull()?QImage():image.convertToFormat(QImage::Format_RGBA8888);
- drawing_=false;changed_=false;before_=QImage();undo_.clear();redo_.clear();
+ drawing_=false;changed_=false;before_=QImage();undo_.clear();redo_.clear();clearSelection();
  updateCanvasSize();notifyHistory();
 }
 void PixelCanvas::replaceImage(const QImage& image){
  if(image.isNull() || drawing_ || image==image_)return;
  undo_.push_back(image_.copy());
  if(undo_.size()>HistoryLimit)undo_.removeFirst();
- redo_.clear();image_=image.convertToFormat(QImage::Format_RGBA8888);
+ redo_.clear();image_=image.convertToFormat(QImage::Format_RGBA8888);clearSelection();
  updateCanvasSize();notifyHistory();
  if(imageChanged)imageChanged(image_);
 }
@@ -37,6 +37,16 @@ void PixelCanvas::paintEvent(QPaintEvent*){
   if(((x/cell)+(y/cell))%2==0)p.fillRect(x,y,cell,cell,QColor("#292632"));
  p.setRenderHint(QPainter::SmoothPixmapTransform,false);
  p.drawImage(rect(),image_);
+ if(!selected_.isEmpty()){
+  p.setPen(QPen(QColor("#b18cff"),0,Qt::DashLine));
+  int w=image_.width(),h=image_.height();
+  for(int y=0;y<h;++y)for(int x=0;x<w;++x)if(selected_[y*w+x]){
+   if(x==0||!selected_[y*w+x-1])p.drawLine(x*zoom_,y*zoom_,x*zoom_,(y+1)*zoom_);
+   if(x==w-1||!selected_[y*w+x+1])p.drawLine((x+1)*zoom_,y*zoom_,(x+1)*zoom_,(y+1)*zoom_);
+   if(y==0||!selected_[(y-1)*w+x])p.drawLine(x*zoom_,y*zoom_,(x+1)*zoom_,y*zoom_);
+   if(y==h-1||!selected_[(y+1)*w+x])p.drawLine(x*zoom_,(y+1)*zoom_,(x+1)*zoom_,(y+1)*zoom_);
+  }
+ }
  if(grid_ && zoom_>=6){
   p.setPen(QPen(QColor(214,198,237,42),0));
   for(int x=0;x<=image_.width();++x)p.drawLine(x*zoom_,0,x*zoom_,height());
@@ -95,6 +105,7 @@ void PixelCanvas::apply(const QPoint& position){
   color_=image_.pixelColor(at);if(colorPicked)colorPicked(color_);return;
  }
  if(tool_==Tool::Fill){floodFill(at);return;}
+ if(tool_==Tool::RectangleSelect||tool_==Tool::MagicWand)return;
  const QColor paint=tool_==Tool::Eraser?QColor(0,0,0,0):color_;
  if(image_.pixelColor(at)==paint)return;
  image_.setPixelColor(at,paint);changed_=true;
@@ -104,6 +115,16 @@ void PixelCanvas::apply(const QPoint& position){
 void PixelCanvas::mousePressEvent(QMouseEvent* event){
  if(event->button()!=Qt::LeftButton || image_.isNull())return;
  if(tool_==Tool::Eyedropper){apply(event->position().toPoint());return;}
+ if(tool_==Tool::MagicWand){
+  const QPoint start=event->position().toPoint()/zoom_;
+  if(!image_.rect().contains(start))return;
+  const QColor target=image_.pixelColor(start);int w=image_.width(),h=image_.height();
+  selected_=QVector<quint8>(w*h,0);QVector<QPoint> q;q.push_back(start);selected_[start.y()*w+start.x()]=1;
+  auto matches=[&](int x,int y){auto col=image_.pixelColor(x,y);return std::max({qAbs(target.red()-col.red()),qAbs(target.green()-col.green()),qAbs(target.blue()-col.blue()),qAbs(target.alpha()-col.alpha())})<=tolerance_;};
+  for(qsizetype i=0;i<q.size();++i){auto p=q.at(i);auto add=[&](int x,int y){if(x<0||y<0||x>=w||y>=h)return;int k=y*w+x;if(!selected_[k]&&matches(x,y)){selected_[k]=1;q.push_back(QPoint(x,y));}};add(p.x()-1,p.y());add(p.x()+1,p.y());add(p.x(),p.y()-1);add(p.x(),p.y()+1);}
+  update();return;
+ }
+ if(tool_==Tool::RectangleSelect){clearSelection();selecting_=true;start_=event->position().toPoint()/zoom_;return;}
  beginChange();drawing_=true;apply(event->position().toPoint());
  if(tool_==Tool::Fill){drawing_=false;endChange();}
 }
@@ -111,6 +132,29 @@ void PixelCanvas::mouseMoveEvent(QMouseEvent* event){
  if(drawing_ && (event->buttons()&Qt::LeftButton))apply(event->position().toPoint());
 }
 void PixelCanvas::mouseReleaseEvent(QMouseEvent* event){
- if(event->button()!=Qt::LeftButton||!drawing_)return;
+ if(event->button()!=Qt::LeftButton)return;
+ if(selecting_){
+  selecting_=false;
+  QPoint end=event->position().toPoint()/zoom_;
+  QRect area=QRect(start_,end).normalized().intersected(image_.rect());
+  selected_=QVector<quint8>(image_.width()*image_.height(),0);
+  for(int y=area.top();y<=area.bottom();++y)for(int x=area.left();x<=area.right();++x)selected_[y*image_.width()+x]=1;
+  update();return;
+ }
+ if(!drawing_)return;
  drawing_=false;endChange();
+}
+
+void PixelCanvas::clearSelection(){selected_.clear();selecting_=false;update();}
+void PixelCanvas::cropSelection(){
+ if(image_.isNull()||selected_.isEmpty())return;
+ int l=image_.width(),t=image_.height(),r=-1,b=-1,w=image_.width();
+ for(int y=0;y<image_.height();++y)for(int x=0;x<w;++x)if(selected_[y*w+x]){l=std::min(l,x);t=std::min(t,y);r=std::max(r,x);b=std::max(b,y);}
+ if(r>=l)replaceImage(image_.copy(QRect(QPoint(l,t),QPoint(r,b))));
+}
+void PixelCanvas::eraseSelection(){
+ if(image_.isNull()||selected_.isEmpty())return;
+ QImage result=image_.copy();bool changed=false;int w=result.width();
+ for(int y=0;y<result.height();++y)for(int x=0;x<w;++x)if(selected_[y*w+x]&&result.pixelColor(x,y).alpha()){result.setPixelColor(x,y,QColor(0,0,0,0));changed=true;}
+ if(changed)replaceImage(result);
 }

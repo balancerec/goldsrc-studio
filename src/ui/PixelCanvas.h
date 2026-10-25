@@ -24,6 +24,11 @@ public:
  void redo();
  void cropSelection();
  void eraseSelection();
+ bool beginTransform();
+ void confirmTransform();
+ void cancelTransform();
+ bool transforming() const {return transforming_;}
+ std::function<void(bool)> transformChanged;
  void clearSelection();
  bool hasSelection() const {return !selected_.isEmpty();}
  void setTolerance(int n){tolerance_=qBound(0,n,255);}
@@ -60,6 +65,16 @@ private:
  SelectionDrag selectionDrag_=SelectionDrag::None;
  QRect dragOriginal_;
  QPoint dragAnchor_;
+ bool transforming_=false;
+ bool transformDragging_=false;
+ QImage transformBase_;
+ QImage transformPatch_;
+ QRect transformRect_;
+ QRect transformDragOriginal_;
+ QPoint transformDragAnchor_;
+ SelectionDrag transformHandle_=SelectionDrag::None;
+ QImage renderTransform() const;
+ SelectionDrag hitRect(const QRect& bounds,const QPoint& pixel) const;
  QRect activeRect() const;
  SelectionDrag hitSelection(const QPoint& pixel) const;
  void setRectangleSelection(const QRect& rect);

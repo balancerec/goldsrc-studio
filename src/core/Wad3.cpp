@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstring>
 #include <limits>
+#include <utility>
 namespace goldsrc {
 namespace {
 quint16 u16(const QByteArray& b, qsizetype i) { const auto* p=reinterpret_cast<const uchar*>(b.constData()+i); return quint16(p[0]) | quint16(p[1])<<8; }
@@ -15,7 +16,7 @@ bool span(qsizetype offset, quint64 n, qsizetype size) { return offset>=0 && qui
 void put16(QByteArray& b, quint16 v) { b.append(char(v&255)); b.append(char((v>>8)&255)); }
 void put32(QByteArray& b, quint32 v) { for(int i=0;i<4;++i)b.append(char((v>>(i*8))&255)); }
 void set32(QByteArray& b, qsizetype pos, quint32 v) { for(int i=0;i<4;++i)b[pos+i]=char((v>>(i*8))&255); }
-QByteArray name16(const QString& s){ QByteArray n=s.toLatin1().left(15); n.resize(16,'\0');return n; }
+QByteArray name16(const QString& s){ QByteArray n=s.toLatin1().left(15); n.resize(16);return n; }
 int nextMultiple16(int x){return ((std::clamp(x,1,4096)+15)/16)*16;}
 }
 QString normalizedName(const QString& input){
@@ -43,10 +44,10 @@ Result readWad3(const QString& path){
     const quint32 w=u32(b,pos+16), h=u32(b,pos+20), off0=u32(b,pos+24),off3=u32(b,pos+36);
     if(w<1||h<1||w>4096||h>4096 || quint64(w)*h>16777216)continue;
     const quint64 p0=quint64(pos)+off0, mip3=quint64(w/8)*quint64(h/8), paletteAt=quint64(pos)+off3+mip3;
-    if(!span(qsizetype(p0),quint64(w)*h,size)||paletteAt>quint64(size)||!span(qsizetype(paletteAt),2,size))continue;
+    if(off0<40 || off3<40 || off0>=disk || off3>=disk || p0+quint64(w)*h>quint64(pos)+disk || paletteAt>quint64(pos)+disk || !span(qsizetype(paletteAt),2,size))continue;
     const quint16 colors=u16(b,qsizetype(paletteAt));
-    if(colors<256 || !span(qsizetype(paletteAt+2),quint64(colors)*3,size))continue;
-    const QByteArray rawName=b.mid(e+16,16);QString name=QString::fromLatin1(rawName.constData(),int(strnlen(rawName.constData(),16)));
+    if(colors<256 || paletteAt+2+quint64(colors)*3>quint64(pos)+disk)continue;
+    const QByteArray rawName=b.mid(e+16,16);QString name=QString::fromLatin1(rawName.constData(),int(rawName.indexOf('\0')<0?16:rawName.indexOf('\0')));
     const bool transparent=name.startsWith('{');
     QImage img(int(w),int(h),QImage::Format_RGBA8888);
     for(quint32 y=0;y<h;++y){auto* dst=img.scanLine(int(y));for(quint32 x=0;x<w;++x){
@@ -54,7 +55,10 @@ Result readWad3(const QString& path){
       const qsizetype cp=qsizetype(paletteAt+2)+qsizetype(index)*3;
       dst[x*4]=uchar(b[cp]);dst[x*4+1]=uchar(b[cp+1]);dst[x*4+2]=uchar(b[cp+2]);dst[x*4+3]=(transparent&&index==255)?0:255;
     }}
-    r.textures.push_back({name,img});
+    Texture tex{name,img};
+    tex.originalImage=img.copy();
+    tex.originalLump=b.mid(pos,disk);
+    r.textures.push_back(std::move(tex));
   }
   if(r.textures.isEmpty())r.error="Nenhuma textura MIPTEX compatível encontrada.";
   return r;
@@ -70,6 +74,17 @@ bool writeWad3(const QString& path,const QVector<Texture>& textures,QString* err
     QString name=normalizedName(t.name);
     if(names.contains(name))return fail("Nome duplicado: "+name);
     names.insert(name);
+    // Reutiliza dados indexados, quatro mipmaps e paleta originais se os pixels não mudaram.
+    // Renomear uma textura não altera sua paleta nem os pixels.
+    if(!t.originalLump.isEmpty() && !t.originalImage.isNull() && t.image==t.originalImage){
+      QByteArray lump=t.originalLump;
+      if(lump.size()<40)return fail("MIPTEX original inválido.");
+      lump.replace(0,16,name16(name));
+      if(quint64(out.size())+quint64(lump.size())>std::numeric_limits<quint32>::max())return fail("Arquivo excede 4 GiB.");
+      entries.push_back({quint32(out.size()),quint32(lump.size()),name16(name)});
+      out+=lump;
+      continue;
+    }
     const int w=nextMultiple16(t.image.width()),h=nextMultiple16(t.image.height());
     const QImage img=t.image.scaled(w,h,Qt::IgnoreAspectRatio,Qt::FastTransformation).convertToFormat(QImage::Format_RGBA8888);
     // Paleta fixa RGB332 com 255 reservado para transparência GoldSrc.

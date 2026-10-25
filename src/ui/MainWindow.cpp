@@ -49,6 +49,15 @@ void MainWindow::setupUi(){
  bar->addSeparator();
  action("Duplicar",QStyle::SP_FileDialogNewFolder,[this]{duplicateTexture();});
  action("Excluir",QStyle::SP_TrashIcon,[this]{removeTexture();});
+ auto* undoAction=new QAction("Desfazer",this);
+ undoAction->setShortcut(QKeySequence::Undo);undoAction->setEnabled(false);
+ auto* redoAction=new QAction("Refazer",this);
+ redoAction->setShortcut(QKeySequence::Redo);redoAction->setEnabled(false);
+ addAction(undoAction);addAction(redoAction);
+ connect(undoAction,&QAction::triggered,this,[this]{canvas_->undo();});
+ connect(redoAction,&QAction::triggered,this,[this]{canvas_->redo();});
+ bar->addSeparator();bar->addAction(undoAction);bar->addAction(redoAction);
+ auto* edit=menuBar()->addMenu("&Editar");edit->addAction(undoAction);edit->addAction(redoAction);
  auto* file=menuBar()->addMenu("&Arquivo");file->addAction(open);file->addAction(save);file->addSeparator();file->addAction("Sair",this,&QWidget::close);
  auto* view=menuBar()->addMenu("&Exibir");
  auto* help=menuBar()->addMenu("&Ajuda");
@@ -72,7 +81,7 @@ void MainWindow::setupUi(){
  auto* engine=new QLabel("●  GOLD SRC     WAD3 · 8-BIT");engine->setObjectName("chip");header->addWidget(engine);cl->addLayout(header);
  auto* toolpanel=new QFrame;toolpanel->setObjectName("toolPanel");auto* tools=new QHBoxLayout(toolpanel);tools->setContentsMargins(12,9,12,9);tools->setSpacing(10);
  tools->addWidget(new QLabel("FERRAMENTA"));
- auto* mode=new QComboBox;mode->addItems({"Pincel","Borracha","Conta-gotas"});mode->setMinimumWidth(155);tools->addWidget(mode);
+ auto* mode=new QComboBox;mode->addItems({"Pincel","Borracha","Conta-gotas","Preenchimento"});mode->setMinimumWidth(155);tools->addWidget(mode);
  colorButton_=new QPushButton("●  Cor");colorButton_->setObjectName("colorButton");tools->addWidget(colorButton_);
  auto* toolSeparator=new QFrame;toolSeparator->setFrameShape(QFrame::VLine);toolSeparator->setObjectName("toolDivider");tools->addWidget(toolSeparator);
  tools->addWidget(new QLabel("ZOOM"));
@@ -98,7 +107,7 @@ void MainWindow::setupUi(){
  cl->addWidget(stage,1);
  auto* footer=new QHBoxLayout;
  summary_=new QLabel("Nenhuma textura carregada");summary_->setObjectName("workspaceFooter");footer->addWidget(summary_);
- footer->addStretch();auto* scaleHint=new QLabel("Roda do mouse: rolagem  •  Edição: clique e arraste");scaleHint->setObjectName("workspaceFooter");footer->addWidget(scaleHint);
+ footer->addStretch();auto* scaleHint=new QLabel("Ctrl+Z: desfazer  •  Ctrl+Y: refazer  •  Até 15 alterações por textura");scaleHint->setObjectName("workspaceFooter");footer->addWidget(scaleHint);
  cl->addLayout(footer);setCentralWidget(center);
  connect(mode,qOverload<int>(&QComboBox::currentIndexChanged),this,[this](int index){canvas_->setTool(static_cast<PixelCanvas::Tool>(index));});
  connect(zoom,qOverload<int>(&QSpinBox::valueChanged),canvas_,&PixelCanvas::setZoom);
@@ -107,6 +116,9 @@ void MainWindow::setupUi(){
   QColor c=QColorDialog::getColor(canvas_->color(),this,"Escolher cor",QColorDialog::ShowAlphaChannel);
   if(c.isValid()) {canvas_->setColor(c);colorButton_->setStyleSheet(QString("background-color:%1;color:%2;").arg(c.name(),c.lightness()<128?"white":"black"));}
  });
+ canvas_->historyChanged=[undoAction,redoAction](bool undo,bool redo){
+  undoAction->setEnabled(undo);redoAction->setEnabled(redo);
+ };
  canvas_->colorPicked=[this,mode](const QColor& c){canvas_->setColor(c);mode->setCurrentIndex(0);statusBar()->showMessage("Cor capturada: "+c.name(QColor::HexArgb));};
  canvas_->imageChanged=[this](const QImage& im){int i=list_->currentRow();if(i<0||i>=textures_.size())return;textures_[i].image=im;
   if(auto* it=list_->item(i))it->setIcon(QIcon(QPixmap::fromImage(im).scaled(66,66,Qt::KeepAspectRatio,Qt::FastTransformation)));

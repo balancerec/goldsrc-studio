@@ -48,14 +48,14 @@ ctest --test-dir build --output-on-failure
 ## Limitações conhecidas
 
 - O leitor suporta somente texturas não comprimidas do tipo `0x43` com paleta interna válida. Outros lumps são ignorados.
-- Ao reexportar um WAD3, as texturas são reconvertidas; a paleta original **não é preservada**.
+- Texturas WAD3 **não modificadas** preservam os dados MIPTEX (índices, mipmaps e paleta) sem perdas. Após editar os pixels, a textura é reconvertida usando a paleta RGB332 simplificada.
 - Nomes são normalizados para um subconjunto ASCII, limitados a 15 caracteres úteis (16 bytes de campo).
 - O exportador ajusta dimensões a múltiplos de 16, até 4096 pixels por eixo, e usa paleta RGB332 aproximada.
 - Undo/redo, desenho por pixel, paleta editável e preview 3D ainda não foram implementados.
 
 ## Roadmap
 
-1. Preservar paletas e pixels indexados originais ao importar WAD3;
+1. Preservar paletas e pixels indexados originais mesmo após edição, com editor indexado;
 2. Aperfeiçoar quantização (median-cut e dithering);
 3. Editor zoom/pan com grade, seleção e pincéis;
 4. Sistema undo/redo e salvamento de projetos;

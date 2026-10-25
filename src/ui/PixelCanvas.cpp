@@ -20,6 +20,14 @@ void PixelCanvas::setImage(const QImage& image){
  drawing_=false;changed_=false;before_=QImage();undo_.clear();redo_.clear();
  updateCanvasSize();notifyHistory();
 }
+void PixelCanvas::replaceImage(const QImage& image){
+ if(image.isNull() || drawing_ || image==image_)return;
+ undo_.push_back(image_.copy());
+ if(undo_.size()>HistoryLimit)undo_.removeFirst();
+ redo_.clear();image_=image.convertToFormat(QImage::Format_RGBA8888);
+ updateCanvasSize();notifyHistory();
+ if(imageChanged)imageChanged(image_);
+}
 void PixelCanvas::setZoom(int zoom){zoom_=std::clamp(zoom,1,32);updateCanvasSize();}
 void PixelCanvas::paintEvent(QPaintEvent*){
  QPainter p(this);p.fillRect(rect(),QColor("#1b1922"));

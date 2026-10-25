@@ -63,6 +63,13 @@ void MainWindow::setupUi(){
  bar->addSeparator();bar->addAction(undoAction);bar->addAction(redoAction);
  auto* edit=menuBar()->addMenu("&Editar");edit->addAction(undoAction);edit->addAction(redoAction);
  auto* file=menuBar()->addMenu("&Arquivo");file->addAction(open);file->addAction(save);file->addSeparator();file->addAction("Sair",this,&QWidget::close);
+ auto* selectionMenu=menuBar()->addMenu("&Seleção");
+ auto* cropSel=selectionMenu->addAction("Recortar seleção");
+ auto* eraseSel=selectionMenu->addAction("Apagar seleção (transparente)");
+ auto* deselect=selectionMenu->addAction("Desmarcar seleção");
+ connect(cropSel,&QAction::triggered,this,[this]{canvas_->cropSelection();});
+ connect(eraseSel,&QAction::triggered,this,[this]{canvas_->eraseSelection();});
+ connect(deselect,&QAction::triggered,this,[this]{canvas_->clearSelection();});
  auto* imageMenu=menuBar()->addMenu("&Imagem");
  auto* cropAction=imageMenu->addAction("Recortar por coordenadas...");
  auto* resizeAction=imageMenu->addAction("Redimensionar imagem...");
@@ -160,9 +167,12 @@ void MainWindow::setupUi(){
  auto* engine=new QLabel("●  GOLD SRC     WAD3 · 8-BIT");engine->setObjectName("chip");header->addWidget(engine);cl->addLayout(header);
  auto* toolpanel=new QFrame;toolpanel->setObjectName("toolPanel");auto* tools=new QHBoxLayout(toolpanel);tools->setContentsMargins(12,9,12,9);tools->setSpacing(10);
  tools->addWidget(new QLabel("FERRAMENTA"));
- auto* mode=new QComboBox;mode->addItems({"Pincel","Borracha","Conta-gotas","Preenchimento"});mode->setMinimumWidth(155);tools->addWidget(mode);
+ auto* mode=new QComboBox;mode->addItems({"Pincel","Borracha","Conta-gotas","Preenchimento","Seleção retangular","Varinha mágica"});mode->setMinimumWidth(155);tools->addWidget(mode);
  colorButton_=new QPushButton("●  Cor");colorButton_->setObjectName("colorButton");tools->addWidget(colorButton_);
  auto* toolSeparator=new QFrame;toolSeparator->setFrameShape(QFrame::VLine);toolSeparator->setObjectName("toolDivider");tools->addWidget(toolSeparator);
+ tools->addWidget(new QLabel("TOLERÂNCIA"));
+ auto* tolerance=new QSpinBox;tolerance->setRange(0,255);tolerance->setValue(25);tolerance->setFixedWidth(65);
+ tolerance->setToolTip("Tolerância da varinha mágica");tools->addWidget(tolerance);
  tools->addWidget(new QLabel("ZOOM"));
  auto* zoom=new QSpinBox;zoom->setRange(1,32);zoom->setValue(4);zoom->setSuffix("×");zoom->setToolTip("Escala de 1 a 32 vezes");zoom->setFixedWidth(80);tools->addWidget(zoom);
  auto* grid=new QCheckBox("Grade de pixels");grid->setChecked(true);tools->addWidget(grid);tools->addStretch();
@@ -191,6 +201,7 @@ void MainWindow::setupUi(){
  connect(mode,qOverload<int>(&QComboBox::currentIndexChanged),this,[this](int index){canvas_->setTool(static_cast<PixelCanvas::Tool>(index));});
  connect(zoom,qOverload<int>(&QSpinBox::valueChanged),canvas_,&PixelCanvas::setZoom);
  connect(grid,&QCheckBox::toggled,canvas_,&PixelCanvas::setGrid);
+ connect(tolerance,qOverload<int>(&QSpinBox::valueChanged),canvas_,&PixelCanvas::setTolerance);
  connect(colorButton_,&QPushButton::clicked,this,[this]{
   QColor c=QColorDialog::getColor(canvas_->color(),this,"Escolher cor",QColorDialog::ShowAlphaChannel);
   if(c.isValid()) {canvas_->setColor(c);colorButton_->setStyleSheet(QString("background-color:%1;color:%2;").arg(c.name(),c.lightness()<128?"white":"black"));}

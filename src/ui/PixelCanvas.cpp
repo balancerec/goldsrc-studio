@@ -37,7 +37,7 @@ void PixelCanvas::paintEvent(QPaintEvent*){
   if(((x/cell)+(y/cell))%2==0)p.fillRect(x,y,cell,cell,QColor("#292632"));
  p.setRenderHint(QPainter::SmoothPixmapTransform,false);
  p.drawImage(rect(),image_);
- if(selecting_){
+ if(selectionDrag_!=SelectionDrag::None && !rectangleSelection_){
   p.setPen(QPen(QColor("#c7a3ff"),0,Qt::DashLine));
   p.setBrush(QColor(142,91,220,28));
   p.drawRect(QRect(start_*zoom_,dragEnd_*zoom_).normalized());
@@ -51,6 +51,19 @@ void PixelCanvas::paintEvent(QPaintEvent*){
    if(x==w-1||!selected_[y*w+x+1])p.drawLine((x+1)*zoom_,y*zoom_,(x+1)*zoom_,(y+1)*zoom_);
    if(y==0||!selected_[(y-1)*w+x])p.drawLine(x*zoom_,y*zoom_,(x+1)*zoom_,y*zoom_);
    if(y==h-1||!selected_[(y+1)*w+x])p.drawLine(x*zoom_,(y+1)*zoom_,(x+1)*zoom_,(y+1)*zoom_);
+  }
+ }
+ if(rectangleSelection_ && hasSelection()){
+  const QRect bounds=activeRect();
+  if(!bounds.isEmpty()){
+   p.setPen(QPen(QColor("#ba8cff"),1,Qt::DashLine));
+   p.setBrush(Qt::NoBrush);
+   const QRect display(bounds.left()*zoom_,bounds.top()*zoom_,bounds.width()*zoom_,bounds.height()*zoom_);
+   p.drawRect(display.adjusted(0,0,-1,-1));
+   p.setBrush(QColor("#eee7ff"));
+   p.setPen(QPen(QColor("#7950b7"),1));
+   const QPoint corners[]={display.topLeft(),display.topRight(),display.bottomLeft(),display.bottomRight()};
+   for(const QPoint& point:corners)p.drawRect(QRect(point-QPoint(4,4),QSize(9,9)));
   }
  }
  if(grid_ && zoom_>=6){
@@ -125,19 +138,57 @@ void PixelCanvas::mousePressEvent(QMouseEvent* event){
   const QPoint start=event->position().toPoint()/zoom_;
   if(!image_.rect().contains(start))return;
   const QColor target=image_.pixelColor(start);int w=image_.width(),h=image_.height();
-  selected_=QVector<quint8>(w*h,0);QVector<QPoint> q;q.push_back(start);selected_[start.y()*w+start.x()]=1;
+  rectangleSelection_=false;selectionBounds_=QRect();
+ selected_=QVector<quint8>(w*h,0);QVector<QPoint> q;q.push_back(start);selected_[start.y()*w+start.x()]=1;
   auto matches=[&](int x,int y){auto col=image_.pixelColor(x,y);return std::max({qAbs(target.red()-col.red()),qAbs(target.green()-col.green()),qAbs(target.blue()-col.blue()),qAbs(target.alpha()-col.alpha())})<=tolerance_;};
   for(qsizetype i=0;i<q.size();++i){auto p=q.at(i);auto add=[&](int x,int y){if(x<0||y<0||x>=w||y>=h)return;int k=y*w+x;if(!selected_[k]&&matches(x,y)){selected_[k]=1;q.push_back(QPoint(x,y));}};add(p.x()-1,p.y());add(p.x()+1,p.y());add(p.x(),p.y()-1);add(p.x(),p.y()+1);}
   update();return;
  }
- if(tool_==Tool::RectangleSelect){clearSelection();selecting_=true;start_=event->position().toPoint()/zoom_;start_.setX(qBound(0,start_.x(),image_.width()-1));start_.setY(qBound(0,start_.y(),image_.height()-1));dragEnd_=start_;update();return;}
+ if(tool_==Tool::RectangleSelect){
+  const QPoint hit=event->position().toPoint()/zoom_;
+  selectionDrag_=hitSelection(hit);
+  if(selectionDrag_==SelectionDrag::None){
+   clearSelection();
+   selectionDrag_=SelectionDrag::Create;
+   start_=QPoint(qBound(0,hit.x(),image_.width()-1),qBound(0,hit.y(),image_.height()-1));
+   dragEnd_=start_;
+  }else{
+   dragOriginal_=activeRect();
+   dragAnchor_=hit;
+  }
+  selecting_=true;update();return;
+ }
  beginChange();drawing_=true;apply(event->position().toPoint());
  if(tool_==Tool::Fill){drawing_=false;endChange();}
 }
 void PixelCanvas::mouseMoveEvent(QMouseEvent* event){
  if(selecting_ && (event->buttons()&Qt::LeftButton)){
-  dragEnd_=event->position().toPoint()/zoom_;
-  dragEnd_.setX(qBound(0,dragEnd_.x(),image_.width()-1));dragEnd_.setY(qBound(0,dragEnd_.y(),image_.height()-1));update();return;
+  const QPoint pos=event->position().toPoint()/zoom_;
+  if(selectionDrag_==SelectionDrag::Create){
+   dragEnd_=QPoint(qBound(0,pos.x(),image_.width()-1),qBound(0,pos.y(),image_.height()-1));
+  }else if(selectionDrag_!=SelectionDrag::None){
+   const QPoint d=pos-dragAnchor_;
+   QRect rect=dragOriginal_;
+   if(selectionDrag_==SelectionDrag::Move){
+    rect.moveTopLeft(QPoint(qBound(0,rect.left()+d.x(),image_.width()-rect.width()),
+                            qBound(0,rect.top()+d.y(),image_.height()-rect.height())));
+   }else{
+    QPoint a=dragOriginal_.topLeft(),b=dragOriginal_.bottomRight();
+    if(selectionDrag_==SelectionDrag::ResizeTL)a+=d;
+    if(selectionDrag_==SelectionDrag::ResizeTR){a.ry()+=d.y();b.rx()+=d.x();}
+    if(selectionDrag_==SelectionDrag::ResizeBL){a.rx()+=d.x();b.ry()+=d.y();}
+    if(selectionDrag_==SelectionDrag::ResizeBR)b+=d;
+    a.setX(qBound(0,a.x(),image_.width()-1));a.setY(qBound(0,a.y(),image_.height()-1));
+    b.setX(qBound(0,b.x(),image_.width()-1));b.setY(qBound(0,b.y(),image_.height()-1));
+    rect=QRect(a,b).normalized();
+   }
+   setRectangleSelection(rect);
+  }
+  update();return;
+ }
+ if(tool_==Tool::RectangleSelect && !selecting_ && image_.rect().contains(event->position().toPoint()/zoom_)){
+  const auto hit=hitSelection(event->position().toPoint()/zoom_);
+  setCursor(hit==SelectionDrag::Move?Qt::SizeAllCursor:hit!=SelectionDrag::None?Qt::SizeFDiagCursor:Qt::CrossCursor);
  }
  if(drawing_ && (event->buttons()&Qt::LeftButton))apply(event->position().toPoint());
 }
@@ -145,17 +196,41 @@ void PixelCanvas::mouseReleaseEvent(QMouseEvent* event){
  if(event->button()!=Qt::LeftButton)return;
  if(selecting_){
   selecting_=false;
-  QPoint end=event->position().toPoint()/zoom_;
-  QRect area=QRect(start_,end).normalized().intersected(image_.rect());
-  selected_=QVector<quint8>(image_.width()*image_.height(),0);
-  for(int y=area.top();y<=area.bottom();++y)for(int x=area.left();x<=area.right();++x)selected_[y*image_.width()+x]=1;
+  if(selectionDrag_==SelectionDrag::Create){
+   const QPoint end=event->position().toPoint()/zoom_;
+   setRectangleSelection(QRect(start_,end).normalized().intersected(image_.rect()));
+  }
+  selectionDrag_=SelectionDrag::None;
   update();return;
  }
  if(!drawing_)return;
  drawing_=false;endChange();
 }
 
-void PixelCanvas::clearSelection(){selected_.clear();selecting_=false;update();}
+void PixelCanvas::clearSelection(){
+ selected_.clear();selecting_=false;rectangleSelection_=false;selectionBounds_=QRect();
+ selectionDrag_=SelectionDrag::None;update();
+}
+QRect PixelCanvas::activeRect() const{return selectionBounds_;}
+void PixelCanvas::setRectangleSelection(const QRect& incoming){
+ const QRect r=incoming.normalized().intersected(image_.rect());
+ if(r.isEmpty())return;
+ selected_=QVector<quint8>(image_.width()*image_.height(),0);
+ for(int y=r.top();y<=r.bottom();++y)for(int x=r.left();x<=r.right();++x)
+  selected_[y*image_.width()+x]=1;
+ selectionBounds_=r;rectangleSelection_=true;update();
+}
+PixelCanvas::SelectionDrag PixelCanvas::hitSelection(const QPoint& p) const{
+ if(!rectangleSelection_ || !hasSelection())return SelectionDrag::None;
+ const QRect r=activeRect();
+ const int radius=std::max(1,6/zoom_);
+ const auto near=[&](QPoint a){return std::abs(p.x()-a.x())<=radius && std::abs(p.y()-a.y())<=radius;};
+ if(near(r.topLeft()))return SelectionDrag::ResizeTL;
+ if(near(r.topRight()))return SelectionDrag::ResizeTR;
+ if(near(r.bottomLeft()))return SelectionDrag::ResizeBL;
+ if(near(r.bottomRight()))return SelectionDrag::ResizeBR;
+ return r.contains(p)?SelectionDrag::Move:SelectionDrag::None;
+}
 void PixelCanvas::cropSelection(){
  if(image_.isNull()||selected_.isEmpty())return;
  int l=image_.width(),t=image_.height(),r=-1,b=-1,w=image_.width();

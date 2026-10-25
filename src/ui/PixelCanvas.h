@@ -25,6 +25,7 @@ public:
  void cropSelection();
  void eraseSelection();
  void clearSelection();
+ bool hasSelection() const {return !selected_.isEmpty();}
  void setTolerance(int n){tolerance_=qBound(0,n,255);}
  std::function<void(const QImage&)> imageChanged;
  std::function<void(const QColor&)> colorPicked;
@@ -53,6 +54,15 @@ private:
  QPoint start_;
  bool selecting_=false;
  QPoint dragEnd_;
+ QRect selectionBounds_;
+ bool rectangleSelection_=false;
+ enum class SelectionDrag { None, Create, Move, ResizeTL, ResizeTR, ResizeBL, ResizeBR };
+ SelectionDrag selectionDrag_=SelectionDrag::None;
+ QRect dragOriginal_;
+ QPoint dragAnchor_;
+ QRect activeRect() const;
+ SelectionDrag hitSelection(const QPoint& pixel) const;
+ void setRectangleSelection(const QRect& rect);
  int tolerance_=25;
  QVector<QImage> undo_;
  QVector<QImage> redo_;

@@ -4,6 +4,10 @@
 #include "core/Wad3.h"
 class QListWidget;
 class QLabel;
+class PixelCanvas;
+class QComboBox;
+class QCheckBox;
+class QPushButton;
 class QLineEdit;
 class QSpinBox;
 class QGraphicsView;
@@ -15,7 +19,8 @@ public:
 private:
  QVector<goldsrc::Texture> textures_;
  QListWidget* list_{};
- QLabel* preview_{};
+ PixelCanvas* canvas_{};
+ QPushButton* colorButton_{};
  QLabel* summary_{};
  QLineEdit* name_{};
  QSpinBox* width_{};

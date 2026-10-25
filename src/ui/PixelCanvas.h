@@ -52,6 +52,7 @@ private:
  QVector<quint8> selected_;
  QPoint start_;
  bool selecting_=false;
+ QPoint dragEnd_;
  int tolerance_=25;
  QVector<QImage> undo_;
  QVector<QImage> redo_;

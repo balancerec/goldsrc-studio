@@ -1,6 +1,13 @@
 #include "MainWindow.h"
 #include "PixelCanvas.h"
 #include <QComboBox>
+#include <QWheelEvent>
+#include <QMouseEvent>
+#include <QDragEnterEvent>
+#include <QDropEvent>
+#include <QMimeData>
+#include <QUrl>
+#include <QScrollBar>
 #include <QInputDialog>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -42,6 +49,7 @@ MainWindow::MainWindow(QWidget* parent):QMainWindow(parent){setupUi();setDarkThe
 void MainWindow::setupUi(){
  setWindowTitle("GoldSrc Studio  |  Editor profissional WAD3");
  resize(1520,920);setMinimumSize(940,640);
+ setAcceptDrops(true);
  setDockOptions(QMainWindow::AnimatedDocks|QMainWindow::AllowNestedDocks|QMainWindow::AllowTabbedDocks);
  auto* bar=addToolBar("Ações principais");bar->setObjectName("mainToolbar");bar->setMovable(false);bar->setIconSize(QSize(17,17));bar->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
  auto action=[&](const QString& label,QStyle::StandardPixmap icon,auto callback){
@@ -174,12 +182,15 @@ void MainWindow::setupUi(){
  auto* tolerance=new QSpinBox;tolerance->setRange(0,255);tolerance->setValue(25);tolerance->setFixedWidth(65);
  tolerance->setToolTip("Tolerância da varinha mágica");tools->addWidget(tolerance);
  tools->addWidget(new QLabel("ZOOM"));
- auto* zoom=new QSpinBox;zoom->setRange(1,32);zoom->setValue(4);zoom->setSuffix("×");zoom->setToolTip("Escala de 1 a 32 vezes");zoom->setFixedWidth(80);tools->addWidget(zoom);
+ auto* zoom=new QSpinBox;zoom->setRange(1,32);zoom->setValue(4);zoom->setSuffix("×");zoom->setToolTip("Escala de 1 a 32 vezes");zoom->setFixedWidth(80);zoomControl_=zoom;tools->addWidget(zoom);
  auto* grid=new QCheckBox("Grade de pixels");grid->setChecked(true);tools->addWidget(grid);tools->addStretch();
  cl->addWidget(toolpanel);
  auto* stage=new QFrame;stage->setObjectName("workspaceStage");auto* stageLayout=new QVBoxLayout(stage);stageLayout->setContentsMargins(0,0,0,0);
  auto* scroll=new QScrollArea;scroll->setObjectName("canvasScroll");scroll->setWidgetResizable(false);scroll->setAlignment(Qt::AlignCenter);scroll->setFrameShape(QFrame::NoFrame);
  canvas_=new PixelCanvas;canvas_->resize(320,320);scroll->setWidget(canvas_);
+ scrollArea_=scroll;scroll->viewport()->installEventFilter(this);canvas_->installEventFilter(this);
+ scroll->setAcceptDrops(false);scroll->viewport()->setAcceptDrops(false);canvas_->setAcceptDrops(false);
+ scroll->setFocusPolicy(Qt::StrongFocus);
  stack_=new QStackedWidget;stack_->setObjectName("canvasStack");
  auto* empty=new QWidget;empty->setObjectName("emptyPage");
  auto* emptyLayout=new QVBoxLayout(empty);emptyLayout->setAlignment(Qt::AlignCenter);emptyLayout->setSpacing(13);
@@ -302,7 +313,11 @@ void MainWindow::selectTexture(int index){
 }
 void MainWindow::openWad(){const QString path=QFileDialog::getOpenFileName(this,"Abrir arquivo WAD3",{},"Arquivos WAD3 (*.wad)");if(path.isEmpty())return;
  const auto r=goldsrc::readWad3(path);if(!r.ok()){QMessageBox::warning(this,"Erro ao abrir",r.error);return;}textures_=r.textures;openedPath_=path;refreshList(0);statusBar()->showMessage(QString("%1 texturas carregadas de %2").arg(textures_.size()).arg(QFileInfo(path).fileName()));}
-void MainWindow::importImages(){const QStringList paths=QFileDialog::getOpenFileNames(this,"Importar imagens",{},"Imagens (*.png *.jpg *.jpeg *.bmp)");int added=0;for(const QString& path:paths){QImage img(path);if(img.isNull())continue;textures_.push_back({goldsrc::normalizedName(QFileInfo(path).fileName()),img});++added;}if(added){refreshList(textures_.size()-1);statusBar()->showMessage(QString("%1 imagem(ns) importada(s)").arg(added));}else if(!paths.isEmpty())QMessageBox::warning(this,"Falha","Nenhuma imagem válida foi importada.");}
+void MainWindow::importImages(){
+ const QStringList paths=QFileDialog::getOpenFileNames(this,"Importar imagens",{},"Imagens (*.png *.jpg *.jpeg *.bmp)");
+ importPaths(paths);
+}
+void MainWindow::importPaths(const QStringList& paths){int added=0;for(const QString& path:paths){QImage img(path);if(img.isNull())continue;textures_.push_back({goldsrc::normalizedName(QFileInfo(path).fileName()),img});++added;}if(added){refreshList(textures_.size()-1);statusBar()->showMessage(QString("%1 imagem(ns) importada(s)").arg(added));}else if(!paths.isEmpty())QMessageBox::warning(this,"Falha","Nenhuma imagem válida foi importada.");}
 void MainWindow::exportWad(){if(textures_.isEmpty()){QMessageBox::information(this,"Sem texturas","Importe imagens antes de exportar.");return;}
  const QString suggested=openedPath_.isEmpty()?"texturas.wad":QFileInfo(openedPath_).absolutePath()+"/texturas_exportadas.wad";
  const QString path=QFileDialog::getSaveFileName(this,"Exportar WAD3",suggested,"Arquivos WAD3 (*.wad)");if(path.isEmpty())return;QString err;
@@ -311,3 +326,61 @@ void MainWindow::removeTexture(){int i=list_->currentRow();if(i<0)return;texture
 void MainWindow::duplicateTexture(){int i=list_->currentRow();if(i<0)return;auto t=textures_[i];t.name=goldsrc::normalizedName(t.name.left(10)+"_COPY");textures_.insert(i+1,t);refreshList(i+1);}
 void MainWindow::resizeTexture(){int i=list_->currentRow();if(i<0)return;int w=width_->value(),h=height_->value();if(w*h>16777216){QMessageBox::warning(this,"Dimensões inválidas","Imagem grande demais.");return;}textures_[i].image=textures_[i].image.scaled(w,h,Qt::IgnoreAspectRatio,Qt::SmoothTransformation);refreshList(i);}
 void MainWindow::renameTexture(){int i=list_->currentRow();if(i<0)return;textures_[i].name=goldsrc::normalizedName(name_->text());refreshList(i);}
+
+bool MainWindow::eventFilter(QObject* watched,QEvent* event){
+ if(scrollArea_ && (watched==canvas_ || watched==scrollArea_->viewport())){
+  if(event->type()==QEvent::Wheel){
+   auto* wheel=static_cast<QWheelEvent*>(event);
+   if(wheel->modifiers() & Qt::ControlModifier){
+    const int delta=wheel->angleDelta().y();
+    if(delta!=0 && zoomControl_){
+     const int next=qBound(1,zoomControl_->value()+(delta>0?1:-1),32);
+     zoomControl_->setValue(next);
+    }
+    return true;
+   }
+  }
+  if(event->type()==QEvent::MouseButtonPress){
+   auto* mouse=static_cast<QMouseEvent*>(event);
+   if(mouse->button()==Qt::MiddleButton || (mouse->button()==Qt::LeftButton && (mouse->modifiers()&Qt::AltModifier))){
+    panning_=true;panAnchor_=mouse->globalPosition().toPoint();
+    panX_=scrollArea_->horizontalScrollBar()->value();
+    panY_=scrollArea_->verticalScrollBar()->value();
+    if(canvas_)canvas_->setCursor(Qt::ClosedHandCursor);
+    return true;
+   }
+  }
+  if(event->type()==QEvent::MouseMove && panning_){
+   auto* mouse=static_cast<QMouseEvent*>(event);
+   const QPoint delta=mouse->globalPosition().toPoint()-panAnchor_;
+   scrollArea_->horizontalScrollBar()->setValue(panX_-delta.x());
+   scrollArea_->verticalScrollBar()->setValue(panY_-delta.y());
+   return true;
+  }
+  if(event->type()==QEvent::MouseButtonRelease && panning_){
+   auto* mouse=static_cast<QMouseEvent*>(event);
+   if(mouse->button()==Qt::MiddleButton || mouse->button()==Qt::LeftButton){
+    panning_=false;if(canvas_)canvas_->setCursor(Qt::CrossCursor);
+    return true;
+   }
+  }
+ }
+ return QMainWindow::eventFilter(watched,event);
+}
+void MainWindow::dragEnterEvent(QDragEnterEvent* event){
+ if(event->mimeData()->hasUrls())event->acceptProposedAction();
+}
+void MainWindow::dropEvent(QDropEvent* event){
+ QStringList paths;
+ for(const QUrl& url:event->mimeData()->urls()){
+  if(!url.isLocalFile())continue;
+  const QString path=url.toLocalFile();
+  if(QFileInfo(path).suffix().compare("wad",Qt::CaseInsensitive)==0){
+   const auto r=goldsrc::readWad3(path);
+   if(r.ok()){textures_+=r.textures;refreshList(int(textures_.size())-1);}
+   else statusBar()->showMessage("WAD3 inválido: "+r.error);
+  }else paths.push_back(path);
+ }
+ if(!paths.isEmpty())importPaths(paths);
+ event->acceptProposedAction();
+}

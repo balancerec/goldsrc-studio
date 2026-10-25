@@ -336,7 +336,7 @@ void MainWindow::importImages(){
  const QStringList paths=QFileDialog::getOpenFileNames(this,"Importar imagens",{},"Imagens (*.png *.jpg *.jpeg *.bmp)");
  importPaths(paths);
 }
-void MainWindow::importPaths(const QStringList& paths){int added=0;for(const QString& path:paths){QImage img(path);if(img.isNull())continue;textures_.push_back({goldsrc::normalizedName(QFileInfo(path).fileName()),img});++added;}if(added){refreshList(textures_.size()-1);statusBar()->showMessage(QString("%1 imagem(ns) importada(s)").arg(added));}else if(!paths.isEmpty())QMessageBox::warning(this,"Falha","Nenhuma imagem válida foi importada.");}
+void MainWindow::importPaths(const QStringList& paths){int added=0;for(const QString& path:paths){QImage img(path);if(img.isNull())continue;textures_.push_back({goldsrc::normalizedName(QFileInfo(path).completeBaseName()),img});++added;}if(added){refreshList(textures_.size()-1);statusBar()->showMessage(QString("%1 imagem(ns) importada(s)").arg(added));}else if(!paths.isEmpty())QMessageBox::warning(this,"Falha","Nenhuma imagem válida foi importada.");}
 void MainWindow::exportWad(){if(textures_.isEmpty()){QMessageBox::information(this,"Sem texturas","Importe imagens antes de exportar.");return;}
  const QString suggested=openedPath_.isEmpty()?"texturas.wad":QFileInfo(openedPath_).absolutePath()+"/texturas_exportadas.wad";
  const QString path=QFileDialog::getSaveFileName(this,"Exportar WAD3",suggested,"Arquivos WAD3 (*.wad)");if(path.isEmpty())return;QString err;

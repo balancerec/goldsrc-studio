@@ -227,16 +227,20 @@ void MainWindow::setupUi(){
   QColor c=QColorDialog::getColor(canvas_->color(),this,"Escolher cor",QColorDialog::ShowAlphaChannel);
   if(c.isValid()) {canvas_->setColor(c);colorButton_->setStyleSheet(QString("background-color:%1;color:%2;").arg(c.name(),c.lightness()<128?"white":"black"));}
  });
- canvas_->transformChanged=[startTransform,acceptTransform,rejectTransform,undoAction,redoAction](bool active){
+ canvas_->transformChanged=[this,startTransform,acceptTransform,rejectTransform,undoAction,redoAction](bool active){
   startTransform->setEnabled(!active);acceptTransform->setEnabled(active);
   rejectTransform->setEnabled(active);
-  if(active){undoAction->setEnabled(false);redoAction->setEnabled(false);}
+  undoAction->setEnabled(!active && canvas_->canUndo());
+  redoAction->setEnabled(!active && canvas_->canRedo());
+  statusBar()->showMessage(active?"Transformação ativa: arraste os pixels ou as alças; Enter confirma, Esc cancela.":"Transformação encerrada.");
  };
  canvas_->historyChanged=[undoAction,redoAction](bool undo,bool redo){
-  undoAction->setEnabled(undo);redoAction->setEnabled(redo);
+  undoAction->setEnabled(undo && !canvas_->transforming());redoAction->setEnabled(redo && !canvas_->transforming());
  };
  canvas_->colorPicked=[this,mode](const QColor& c){canvas_->setColor(c);mode->setCurrentIndex(0);statusBar()->showMessage("Cor capturada: "+c.name(QColor::HexArgb));};
  canvas_->imageChanged=[this](const QImage& im){int i=list_->currentRow();if(i<0||i>=textures_.size())return;textures_[i].image=im;
+  width_->setValue(im.width());height_->setValue(im.height());
+  summary_->setText(QString("%1  •  %2 × %3 px  •  %4 textura(s) no pacote").arg(textures_[i].name).arg(im.width()).arg(im.height()).arg(textures_.size()));
   if(auto* it=list_->item(i))it->setIcon(QIcon(QPixmap::fromImage(im).scaled(66,66,Qt::KeepAspectRatio,Qt::FastTransformation)));
   statusBar()->showMessage("Textura modificada. Exporte o WAD3 para salvar.");};
  auto* props=new QDockWidget("INSPETOR",this);props->setObjectName("Inspetor");props->setMinimumWidth(275);

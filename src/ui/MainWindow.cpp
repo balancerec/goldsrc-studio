@@ -1,6 +1,10 @@
 #include "MainWindow.h"
 #include "PixelCanvas.h"
 #include <QComboBox>
+#include <QInputDialog>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QSignalBlocker>
 #include <QFrame>
 #include <QShortcut>
 #include <QStackedWidget>
@@ -59,6 +63,81 @@ void MainWindow::setupUi(){
  bar->addSeparator();bar->addAction(undoAction);bar->addAction(redoAction);
  auto* edit=menuBar()->addMenu("&Editar");edit->addAction(undoAction);edit->addAction(redoAction);
  auto* file=menuBar()->addMenu("&Arquivo");file->addAction(open);file->addAction(save);file->addSeparator();file->addAction("Sair",this,&QWidget::close);
+ auto* imageMenu=menuBar()->addMenu("&Imagem");
+ auto* cropAction=imageMenu->addAction("Recortar por coordenadas...");
+ auto* resizeAction=imageMenu->addAction("Redimensionar imagem...");
+ imageMenu->addSeparator();
+ auto* removeBgAction=imageMenu->addAction("Remover fundo por cor...");
+ auto* transparentAction=imageMenu->addAction("Transformar cor em transparência...");
+ auto imageOperation=[this](const QString& label, auto operation){
+  const int i=list_->currentRow();
+  if(i<0 || i>=textures_.size()){QMessageBox::information(this,label,"Selecione uma textura primeiro.");return;}
+  const QImage previous=canvas_->image();
+  if(previous.isNull())return;
+  QImage result=operation(previous);
+  if(result.isNull())return;
+  canvas_->replaceImage(result);
+  width_->setValue(result.width());height_->setValue(result.height());
+  statusBar()->showMessage(label+" aplicado. Exporte o WAD3 para salvar.");
+ };
+ connect(cropAction,&QAction::triggered,this,[this,imageOperation]{
+  imageOperation("Recorte",[this](const QImage& src)->QImage{
+   QDialog dialog(this);dialog.setWindowTitle("Recortar textura");
+   QFormLayout form(&dialog);
+   auto spin=[&](int from,int to,int value){auto* n=new QSpinBox(&dialog);n->setRange(from,to);n->setValue(value);return n;};
+   auto* x=spin(0,src.width()-1,0);auto* y=spin(0,src.height()-1,0);
+   auto* w=spin(1,src.width(),src.width());auto* h=spin(1,src.height(),src.height());
+   form.addRow("Posição X",x);form.addRow("Posição Y",y);form.addRow("Largura",w);form.addRow("Altura",h);
+   QDialogButtonBox buttons(QDialogButtonBox::Ok|QDialogButtonBox::Cancel);
+   form.addRow(&buttons);
+   connect(&buttons,&QDialogButtonBox::accepted,&dialog,&QDialog::accept);
+   connect(&buttons,&QDialogButtonBox::rejected,&dialog,&QDialog::reject);
+   if(dialog.exec()!=QDialog::Accepted)return {};
+   return src.copy(QRect(x->value(),y->value(),w->value(),h->value()).intersected(src.rect()));
+  });
+ });
+ connect(resizeAction,&QAction::triggered,this,[this,imageOperation]{
+  imageOperation("Redimensionamento",[this](const QImage& src)->QImage{
+   QDialog dialog(this);dialog.setWindowTitle("Redimensionar textura");QFormLayout form(&dialog);
+   QSpinBox w(&dialog),h(&dialog);w.setRange(1,4096);h.setRange(1,4096);
+   w.setValue(src.width());h.setValue(src.height());
+   QCheckBox aspect("Manter proporção",&dialog);aspect.setChecked(true);
+   QCheckBox smooth("Suavizar pixels (interpolação)",&dialog);
+   form.addRow("Largura",&w);form.addRow("Altura",&h);form.addRow(&aspect);form.addRow(&smooth);
+   connect(&w,qOverload<int>(&QSpinBox::valueChanged),&dialog,[&](int n){if(aspect.isChecked()){QSignalBlocker b(&h);h.setValue(qBound(1,qRound(double(n)*src.height()/src.width()),4096));}});
+   connect(&h,qOverload<int>(&QSpinBox::valueChanged),&dialog,[&](int n){if(aspect.isChecked()){QSignalBlocker b(&w);w.setValue(qBound(1,qRound(double(n)*src.width()/src.height()),4096));}});
+   QDialogButtonBox buttons(QDialogButtonBox::Ok|QDialogButtonBox::Cancel);
+   form.addRow(&buttons);connect(&buttons,&QDialogButtonBox::accepted,&dialog,&QDialog::accept);
+   connect(&buttons,&QDialogButtonBox::rejected,&dialog,&QDialog::reject);
+   if(dialog.exec()!=QDialog::Accepted)return {};
+   return src.scaled(w.value(),h.value(),Qt::IgnoreAspectRatio,smooth.isChecked()?Qt::SmoothTransformation:Qt::FastTransformation);
+  });
+ });
+ auto transparentOperation=[this,imageOperation](const QString& label,bool edgesOnly){
+  imageOperation(label,[this,edgesOnly](const QImage& src)->QImage{
+   QImage out=src.convertToFormat(QImage::Format_RGBA8888);
+   QColor target=QColorDialog::getColor(src.pixelColor(0,0),this,"Selecione a cor do fundo");
+   if(!target.isValid())return {};
+   bool ok=false;
+   const int tol=QInputDialog::getInt(this,"Tolerância","Diferença RGB permitida (0–255):",25,0,255,1,&ok);
+   if(!ok)return {};
+   auto match=[&](int x,int y){auto c=out.pixelColor(x,y);return std::max({qAbs(c.red()-target.red()),qAbs(c.green()-target.green()),qAbs(c.blue()-target.blue())})<=tol;};
+   if(edgesOnly){
+    QVector<QPoint> queue;queue.reserve(2048);
+    const int w=out.width(),h=out.height();
+    QVector<quint8> seen(qsizetype(w)*h,0);
+    auto add=[&](int x,int y){if(x<0||y<0||x>=w||y>=h)return;qsizetype p=qsizetype(y)*w+x;if(!seen[p]){seen[p]=1;if(match(x,y))queue.push_back(QPoint(x,y));}};
+    for(int x=0;x<w;++x){add(x,0);add(x,h-1);}
+    for(int y=0;y<h;++y){add(0,y);add(w-1,y);}
+    for(qsizetype head=0;head<queue.size();++head){const auto p=queue[head];auto color=out.pixelColor(p);color.setAlpha(0);out.setPixelColor(p,color);add(p.x()-1,p.y());add(p.x()+1,p.y());add(p.x(),p.y()-1);add(p.x(),p.y()+1);}
+   }else{
+    for(int y=0;y<out.height();++y)for(int x=0;x<out.width();++x)if(match(x,y)){auto color=out.pixelColor(x,y);color.setAlpha(0);out.setPixelColor(x,y,color);}
+   }
+   return out;
+  });
+ };
+ connect(removeBgAction,&QAction::triggered,this,[transparentOperation]{transparentOperation("Remover fundo por cor",true);});
+ connect(transparentAction,&QAction::triggered,this,[transparentOperation]{transparentOperation("Cor transparente",false);});
  auto* view=menuBar()->addMenu("&Exibir");
  auto* help=menuBar()->addMenu("&Ajuda");
  help->addAction("Sobre",this,[this]{QMessageBox::about(this,"GoldSrc Studio","GoldSrc Studio — Qt 6 / C++20\nFerramentas de textura para GoldSrc.\nCompilação de desenvolvimento.");});

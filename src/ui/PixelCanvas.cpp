@@ -90,13 +90,13 @@ void PixelCanvas::undo(){
  if(transforming_)return;
  if(!canUndo()||drawing_)return;
  redo_.push_back(image_.copy());image_=undo_.takeLast();
- update();notifyHistory();if(imageChanged)imageChanged(image_);
+ clearSelection();updateCanvasSize();notifyHistory();if(imageChanged)imageChanged(image_);
 }
 void PixelCanvas::redo(){
  if(transforming_)return;
  if(!canRedo()||drawing_)return;
  undo_.push_back(image_.copy());image_=redo_.takeLast();
- update();notifyHistory();if(imageChanged)imageChanged(image_);
+ clearSelection();updateCanvasSize();notifyHistory();if(imageChanged)imageChanged(image_);
 }
 void PixelCanvas::floodFill(const QPoint& start){
  if(!image_.rect().contains(start))return;

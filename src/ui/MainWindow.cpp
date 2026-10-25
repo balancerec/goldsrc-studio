@@ -39,20 +39,20 @@ void MainWindow::setupUi(){
  setWindowTitle("GoldSrc Studio  |  Editor profissional WAD3");
  resize(1520,920);setMinimumSize(940,640);
  setDockOptions(QMainWindow::AnimatedDocks|QMainWindow::AllowNestedDocks|QMainWindow::AllowTabbedDocks);
- auto* bar=addToolBar("Ações principais");bar->setObjectName("mainToolbar");bar->setMovable(false);bar->setIconSize(QSize(18,18));
+ auto* bar=addToolBar("Ações principais");bar->setObjectName("mainToolbar");bar->setMovable(false);bar->setIconSize(QSize(17,17));bar->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
  auto action=[&](const QString& label,QStyle::StandardPixmap icon,auto callback){
   auto* a=bar->addAction(style()->standardIcon(icon),label);
   connect(a,&QAction::triggered,this,callback);return a;};
- auto* open=action("ABRIR WAD3",QStyle::SP_DialogOpenButton,[this]{openWad();});open->setShortcut(QKeySequence::Open);
- action("IMPORTAR IMAGENS",QStyle::SP_FileIcon,[this]{importImages();});
- auto* save=action("EXPORTAR WAD3",QStyle::SP_DialogSaveButton,[this]{exportWad();});save->setShortcut(QKeySequence::Save);
+ auto* open=action("Abrir WAD3",QStyle::SP_DialogOpenButton,[this]{openWad();});open->setShortcut(QKeySequence::Open);
+ action("Importar imagens",QStyle::SP_FileIcon,[this]{importImages();});
+ auto* save=action("Exportar WAD3",QStyle::SP_DialogSaveButton,[this]{exportWad();});save->setShortcut(QKeySequence::Save);
  bar->addSeparator();
- action("DUPLICAR",QStyle::SP_FileDialogNewFolder,[this]{duplicateTexture();});
- action("EXCLUIR",QStyle::SP_TrashIcon,[this]{removeTexture();});
+ action("Duplicar",QStyle::SP_FileDialogNewFolder,[this]{duplicateTexture();});
+ action("Excluir",QStyle::SP_TrashIcon,[this]{removeTexture();});
  auto* file=menuBar()->addMenu("&Arquivo");file->addAction(open);file->addAction(save);file->addSeparator();file->addAction("Sair",this,&QWidget::close);
  auto* view=menuBar()->addMenu("&Exibir");
  auto* help=menuBar()->addMenu("&Ajuda");
- help->addAction("Sobre",this,[this]{QMessageBox::about(this,"GoldSrc Studio","GoldSrc Studio — Qt 6 / C++20\\nFerramentas de textura para GoldSrc.\\nCompilação de desenvolvimento.");});
+ help->addAction("Sobre",this,[this]{QMessageBox::about(this,"GoldSrc Studio","GoldSrc Studio — Qt 6 / C++20\nFerramentas de textura para GoldSrc.\nCompilação de desenvolvimento.");});
  auto* library=new QDockWidget("BIBLIOTECA DE TEXTURAS",this);library->setObjectName("Biblioteca");library->setMinimumWidth(250);
  auto* side=new QWidget;auto* sl=new QVBoxLayout(side);sl->setContentsMargins(12,16,12,12);sl->setSpacing(12);
  auto* libCaption=new QLabel("PACOTE ATUAL");libCaption->setObjectName("eyebrow");sl->addWidget(libCaption);
@@ -66,13 +66,13 @@ void MainWindow::setupUi(){
  auto* center=new QWidget;auto* cl=new QVBoxLayout(center);cl->setContentsMargins(20,18,20,14);cl->setSpacing(13);
  auto* header=new QHBoxLayout;
  auto* titleColumn=new QVBoxLayout;titleColumn->setSpacing(2);
- auto* eyebrow=new QLabel("GOLDSRC  /  WORKSPACE");eyebrow->setObjectName("eyebrow");titleColumn->addWidget(eyebrow);
+ auto* eyebrow=new QLabel("TEXTURE LAB  /  GOLDSRC ENGINE");eyebrow->setObjectName("eyebrow");titleColumn->addWidget(eyebrow);
  auto* title=new QLabel("Editor de texturas");title->setObjectName("pageTitle");titleColumn->addWidget(title);
  header->addLayout(titleColumn);header->addStretch();
- auto* engine=new QLabel("WAD3  •  MIPTEX  •  256 CORES");engine->setObjectName("chip");header->addWidget(engine);cl->addLayout(header);
+ auto* engine=new QLabel("●  GOLD SRC     WAD3 · 8-BIT");engine->setObjectName("chip");header->addWidget(engine);cl->addLayout(header);
  auto* toolpanel=new QFrame;toolpanel->setObjectName("toolPanel");auto* tools=new QHBoxLayout(toolpanel);tools->setContentsMargins(12,9,12,9);tools->setSpacing(10);
  tools->addWidget(new QLabel("FERRAMENTA"));
- auto* mode=new QComboBox;mode->addItems({"✎  Pincel","◌  Borracha","◎  Conta-gotas"});mode->setMinimumWidth(155);tools->addWidget(mode);
+ auto* mode=new QComboBox;mode->addItems({"Pincel","Borracha","Conta-gotas"});mode->setMinimumWidth(155);tools->addWidget(mode);
  colorButton_=new QPushButton("●  Cor");colorButton_->setObjectName("colorButton");tools->addWidget(colorButton_);
  auto* toolSeparator=new QFrame;toolSeparator->setFrameShape(QFrame::VLine);toolSeparator->setObjectName("toolDivider");tools->addWidget(toolSeparator);
  tools->addWidget(new QLabel("ZOOM"));
@@ -81,7 +81,20 @@ void MainWindow::setupUi(){
  cl->addWidget(toolpanel);
  auto* stage=new QFrame;stage->setObjectName("workspaceStage");auto* stageLayout=new QVBoxLayout(stage);stageLayout->setContentsMargins(0,0,0,0);
  auto* scroll=new QScrollArea;scroll->setObjectName("canvasScroll");scroll->setWidgetResizable(false);scroll->setAlignment(Qt::AlignCenter);scroll->setFrameShape(QFrame::NoFrame);
- canvas_=new PixelCanvas;canvas_->resize(320,320);scroll->setWidget(canvas_);stageLayout->addWidget(scroll,1);
+ canvas_=new PixelCanvas;canvas_->resize(320,320);scroll->setWidget(canvas_);
+ stack_=new QStackedWidget;stack_->setObjectName("canvasStack");
+ auto* empty=new QWidget;empty->setObjectName("emptyPage");
+ auto* emptyLayout=new QVBoxLayout(empty);emptyLayout->setAlignment(Qt::AlignCenter);emptyLayout->setSpacing(13);
+ auto* emptySymbol=new QLabel("◇");emptySymbol->setObjectName("emptySymbol");emptySymbol->setAlignment(Qt::AlignCenter);emptyLayout->addWidget(emptySymbol);
+ auto* emptyTitle=new QLabel("Seu espaço criativo começa aqui");emptyTitle->setObjectName("emptyTitle");emptyTitle->setAlignment(Qt::AlignCenter);emptyLayout->addWidget(emptyTitle);
+ auto* emptyDescription=new QLabel("Abra um pacote WAD3 existente ou importe imagens para criar suas texturas GoldSrc.");emptyDescription->setObjectName("emptyDescription");emptyDescription->setWordWrap(true);emptyDescription->setAlignment(Qt::AlignCenter);emptyDescription->setMaximumWidth(430);emptyLayout->addWidget(emptyDescription,0,Qt::AlignHCenter);
+ auto* emptyButtons=new QHBoxLayout;emptyButtons->setAlignment(Qt::AlignCenter);emptyButtons->setSpacing(12);
+ auto* emptyOpen=new QPushButton("Abrir WAD3");emptyOpen->setObjectName("primaryButton");emptyButtons->addWidget(emptyOpen);
+ auto* emptyImport=new QPushButton("Importar imagens");emptyImport->setObjectName("ghostButton");emptyButtons->addWidget(emptyImport);
+ emptyLayout->addSpacing(5);emptyLayout->addLayout(emptyButtons);
+ connect(emptyOpen,&QPushButton::clicked,this,[this]{openWad();});
+ connect(emptyImport,&QPushButton::clicked,this,[this]{importImages();});
+ stack_->addWidget(empty);stack_->addWidget(scroll);stack_->setCurrentIndex(0);stageLayout->addWidget(stack_,1);
  cl->addWidget(stage,1);
  auto* footer=new QHBoxLayout;
  summary_=new QLabel("Nenhuma textura carregada");summary_->setObjectName("workspaceFooter");footer->addWidget(summary_);
@@ -116,49 +129,60 @@ void MainWindow::setupUi(){
 }
 void MainWindow::setDarkTheme(){
  qApp->setStyle("Fusion");
- qApp->setStyleSheet(R"(
- QWidget{background:#0f1218;color:#e4e9f2;font-family:'Segoe UI',Arial;font-size:12px}
- QMainWindow{background:#0c0f14}
- QMenuBar{background:#131924;padding:6px 8px;border-bottom:1px solid #29323f}
- QMenuBar::item{padding:7px 12px}
- QMenuBar::item:selected,QMenu::item:selected{background:#a82f42;border-radius:4px}
- QMenu{background:#1b2330;border:1px solid #303a4a}
- QToolBar#mainToolbar{background:#141b25;padding:11px 14px;spacing:8px;border-bottom:1px solid #2c3441}
- QToolBar#mainToolbar QToolButton{color:#e6edf5;background:#222b38;padding:9px 12px;border:1px solid #344151;border-radius:7px;font-weight:650}
- QToolBar#mainToolbar QToolButton:hover{background:#323d4d;border-color:#d34b60}
- QDockWidget{background:#111720;border:0}
- QDockWidget::title{background:#1e2734;padding:12px;font-weight:700;letter-spacing:1px}
- QLabel#eyebrow{color:#d9576c;font-size:10px;letter-spacing:2px;font-weight:700}
- QLabel#pageTitle{font-size:24px;font-weight:700;color:#f3f5f8}
- QLabel#chip{background:#252f3b;border:1px solid #3b4656;border-radius:13px;padding:7px 12px;color:#bbc9d9;font-weight:600}
- QLineEdit,QSpinBox,QComboBox{background:#1b2531;color:#f1f4fa;border:1px solid #3a4658;border-radius:7px;padding:10px;selection-background-color:#9d3042}
- QLineEdit:focus,QSpinBox:focus,QComboBox:focus{border:1px solid #dc566a}
- QListWidget{background:#131a24;border:1px solid #344051;border-radius:8px;padding:6px}
- QListWidget::item{padding:9px 7px;border-radius:7px;margin-bottom:3px}
- QListWidget::item:selected{background:#77303d;border:1px solid #b94b60}
- QListWidget::item:hover{background:#293342}
- QFrame#toolPanel{background:#1b2330;border:1px solid #344050;border-radius:10px}
- QFrame#toolDivider{background:#3b4655;max-width:1px}
- QFrame#workspaceStage{background:#151b25;border:1px solid #344050;border-radius:10px}
- QScrollArea#canvasScroll{background:#151b25;border:0}
- QScrollArea#canvasScroll > QWidget > QWidget{background:#151b25}
- QGroupBox{border:1px solid #344153;border-radius:9px;margin-top:14px;padding:13px 8px 10px;font-weight:650}
- QGroupBox::title{subcontrol-origin:margin;left:10px;padding:0 5px;color:#dee6f1}
- QPushButton{background:#a83246;color:white;padding:12px;border:1px solid #c84a5c;border-radius:8px;font-weight:650}
- QPushButton:hover{background:#c13b50}
- QPushButton#ghostButton{background:#253041;border:1px solid #405066}
- QPushButton#ghostButton:hover{background:#34435a}
- QPushButton#colorButton{background:#a83246}
- QCheckBox{spacing:8px}
- QCheckBox::indicator{width:15px;height:15px}
- QLabel#smallNote{color:#9cabbd;font-size:12px;line-height:1.5}
- QLabel#workspaceFooter{color:#94a4b9;font-size:11px}
- QStatusBar{background:#191f2a;color:#a9bbca;border-top:1px solid #313b49;padding:4px}
- QScrollBar:vertical{background:#19212b;width:11px}
- QScrollBar::handle:vertical{background:#455365;border-radius:4px;min-height:28px}
- QScrollBar:horizontal{background:#19212b;height:11px}
- QScrollBar::handle:horizontal{background:#455365;border-radius:4px;min-width:28px}
- )");
+ qApp->setStyleSheet(R"QSS(
+ QWidget{background:#111116;color:#eeeeF5;font-family:'Segoe UI',Arial;font-size:12px}
+ QMainWindow{background:#0d0d12}
+ QMenuBar{background:#15151d;padding:6px 13px;border-bottom:1px solid #282735}
+ QMenuBar::item{padding:7px 12px;border-radius:6px}
+ QMenuBar::item:selected{background:#332647;color:#efe3ff}
+ QMenu{background:#1b1b25;border:1px solid #383347;border-radius:7px;padding:6px}
+ QMenu::item{padding:8px 16px}
+ QMenu::item:selected{background:#7248bc;color:white}
+ QToolBar#mainToolbar{background:#16161f;border-bottom:1px solid #292837;padding:12px 19px;spacing:10px}
+ QToolBar#mainToolbar QToolButton{background:#24232f;color:#e9e6ef;padding:10px 13px;border:1px solid #353247;border-radius:9px;font-weight:600}
+ QToolBar#mainToolbar QToolButton:hover{background:#382c50;border-color:#9260ea}
+ QToolBar#mainToolbar QToolButton:pressed{background:#67429f}
+ QToolBar::separator{background:#383341;width:1px;margin:7px 9px}
+ QDockWidget{background:#16161e;color:#eae7ef;border:0}
+ QDockWidget::title{background:#1e1d29;border-bottom:1px solid #343042;padding:13px;font-weight:600;color:#c5b7dd}
+ QDockWidget::close-button,QDockWidget::float-button{border:0}
+ QLabel#eyebrow{color:#ad8cf0;font-size:10px;font-weight:bold;letter-spacing:1.5px}
+ QLabel#pageTitle{font-size:26px;font-weight:700;color:#faf9fd}
+ QLabel#chip{background:#242033;border:1px solid #433554;border-radius:14px;padding:9px 13px;color:#c6a5ff;font-weight:600}
+ QLineEdit,QSpinBox,QComboBox{background:#23222d;color:#f0edf7;border:1px solid #393649;border-radius:9px;padding:9px;selection-background-color:#8350cd}
+ QLineEdit:focus,QSpinBox:focus,QComboBox:focus{border:1px solid #9b71ed}
+ QLineEdit:disabled,QSpinBox:disabled{color:#65616f;background:#1d1c26}
+ QComboBox::drop-down{border:0;width:20px}
+ QListWidget{background:#16161e;border:1px solid #302e3c;border-radius:12px;padding:8px}
+ QListWidget::item{padding:10px 8px;margin:2px 0;border-radius:9px}
+ QListWidget::item:selected{background:#362848;color:#eee0ff;border:1px solid #7d54bf}
+ QListWidget::item:hover{background:#252231}
+ QFrame#toolPanel{background:#1b1a25;border:1px solid #353142;border-radius:12px}
+ QFrame#toolDivider{background:#3a354a;max-width:1px}
+ QFrame#workspaceStage{background:#14141c;border:1px solid #333044;border-radius:13px}
+ QScrollArea#canvasScroll{background:#14141c;border:0}
+ QWidget#emptyPage{background:#14141c}
+ QLabel#emptySymbol{font-size:70px;color:#9569df;background:transparent}
+ QLabel#emptyTitle{font-size:24px;font-weight:700;color:#eeebf6;background:transparent}
+ QLabel#emptyDescription{font-size:13px;color:#a9a1b8;background:transparent}
+ QGroupBox{border:1px solid #343044;border-radius:10px;margin-top:16px;padding:14px 8px 10px;font-weight:600}
+ QGroupBox::title{subcontrol-origin:margin;left:12px;padding:0 6px;color:#cec3e2}
+ QPushButton{background:#7850bd;color:#fff;border:1px solid #926bde;border-radius:9px;padding:11px 13px;font-weight:600}
+ QPushButton:hover{background:#9467e2;border-color:#bb98ff}
+ QPushButton:pressed{background:#624096}
+ QPushButton#ghostButton{background:#262433;border:1px solid #40374f;color:#e1d9ed}
+ QPushButton#ghostButton:hover{background:#332a44;border-color:#8260ae}
+ QPushButton#primaryButton{background:#8657d5;border:1px solid #a078ed}
+ QPushButton#colorButton{background:#7651bd}
+ QCheckBox{spacing:7px;color:#c9c1d4}
+ QLabel#smallNote{color:#a6a0b6;font-size:12px}
+ QLabel#workspaceFooter{color:#88839d;font-size:11px}
+ QStatusBar{background:#181721;color:#a49bb6;border-top:1px solid #353042;padding:5px}
+ QScrollBar:vertical{background:#1a1923;width:11px}
+ QScrollBar::handle:vertical{background:#494054;border-radius:5px;min-height:30px}
+ QScrollBar:horizontal{background:#1a1923;height:11px}
+ QScrollBar::handle:horizontal{background:#494054;border-radius:5px;min-width:30px}
+ )QSS");
 }
 void MainWindow::refreshList(int index){
  const int wanted=index>=0?index:list_->currentRow();list_->blockSignals(true);list_->clear();
@@ -169,8 +193,8 @@ void MainWindow::refreshList(int index){
 void MainWindow::selectTexture(int index){
  updating_=true;const bool valid=index>=0&&index<textures_.size();
  name_->setEnabled(valid);width_->setEnabled(valid);height_->setEnabled(valid);
- if(!valid){canvas_->setImage(QImage());name_->clear();summary_->setText("Nenhuma textura selecionada");updating_=false;return;}
- const auto& t=textures_.at(index);name_->setText(t.name);width_->setValue(t.image.width());height_->setValue(t.image.height());
+ if(!valid){stack_->setCurrentIndex(0);canvas_->setImage(QImage());name_->clear();summary_->setText("Nenhuma textura selecionada");updating_=false;return;}
+ stack_->setCurrentIndex(1);const auto& t=textures_.at(index);name_->setText(t.name);width_->setValue(t.image.width());height_->setValue(t.image.height());
  canvas_->setImage(t.image);
  summary_->setText(QString("%1  •  %2 × %3 px  •  %4 textura(s) no pacote").arg(t.name).arg(t.image.width()).arg(t.image.height()).arg(textures_.size()));updating_=false;
 }

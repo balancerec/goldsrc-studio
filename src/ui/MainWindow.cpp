@@ -207,7 +207,7 @@ void MainWindow::setupUi(){
  cl->addWidget(stage,1);
  auto* footer=new QHBoxLayout;
  summary_=new QLabel("Nenhuma textura carregada");summary_->setObjectName("workspaceFooter");footer->addWidget(summary_);
- footer->addStretch();auto* scaleHint=new QLabel("Ctrl+Z: desfazer  •  Ctrl+Y: refazer  •  Histórico da textura ativa: 15 ações");scaleHint->setObjectName("workspaceFooter");footer->addWidget(scaleHint);
+ footer->addStretch();auto* scaleHint=new QLabel("Ctrl+roda: zoom  •  Botão central: navegar  •  Arraste alças para ajustar seleção");scaleHint->setObjectName("workspaceFooter");footer->addWidget(scaleHint);
  cl->addLayout(footer);setCentralWidget(center);
  connect(mode,qOverload<int>(&QComboBox::currentIndexChanged),this,[this](int index){canvas_->setTool(static_cast<PixelCanvas::Tool>(index));});
  connect(zoom,qOverload<int>(&QSpinBox::valueChanged),canvas_,&PixelCanvas::setZoom);
@@ -335,7 +335,18 @@ bool MainWindow::eventFilter(QObject* watched,QEvent* event){
     const int delta=wheel->angleDelta().y();
     if(delta!=0 && zoomControl_){
      const int next=qBound(1,zoomControl_->value()+(delta>0?1:-1),32);
-     zoomControl_->setValue(next);
+     if(next!=zoomControl_->value()){
+      // Mantém o ponto sob o cursor fixo durante o zoom.
+      const QPoint viewportPos=(watched==canvas_)
+        ?canvas_->mapTo(scrollArea_->viewport(),wheel->position().toPoint())
+        :wheel->position().toPoint();
+      const QPoint canvasPos=canvas_->mapFrom(scrollArea_->viewport(),viewportPos);
+      const double px=double(canvasPos.x())/canvas_->zoom();
+      const double py=double(canvasPos.y())/canvas_->zoom();
+      zoomControl_->setValue(next);
+      scrollArea_->horizontalScrollBar()->setValue(qRound(px*next-viewportPos.x()));
+      scrollArea_->verticalScrollBar()->setValue(qRound(py*next-viewportPos.y()));
+     }
     }
     return true;
    }

@@ -107,7 +107,7 @@ void MainWindow::setupUi(){
  cl->addWidget(stage,1);
  auto* footer=new QHBoxLayout;
  summary_=new QLabel("Nenhuma textura carregada");summary_->setObjectName("workspaceFooter");footer->addWidget(summary_);
- footer->addStretch();auto* scaleHint=new QLabel("Ctrl+Z: desfazer  •  Ctrl+Y: refazer  •  Até 15 alterações por textura");scaleHint->setObjectName("workspaceFooter");footer->addWidget(scaleHint);
+ footer->addStretch();auto* scaleHint=new QLabel("Ctrl+Z: desfazer  •  Ctrl+Y: refazer  •  Histórico da textura ativa: 15 ações");scaleHint->setObjectName("workspaceFooter");footer->addWidget(scaleHint);
  cl->addLayout(footer);setCentralWidget(center);
  connect(mode,qOverload<int>(&QComboBox::currentIndexChanged),this,[this](int index){canvas_->setTool(static_cast<PixelCanvas::Tool>(index));});
  connect(zoom,qOverload<int>(&QSpinBox::valueChanged),canvas_,&PixelCanvas::setZoom);

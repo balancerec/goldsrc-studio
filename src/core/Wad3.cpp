@@ -3,6 +3,7 @@
 #include <QFileInfo>
 #include <QByteArray>
 #include <QSet>
+#include <QHash>
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -20,11 +21,16 @@ QByteArray name16(const QString& s){ QByteArray n=s.toLatin1().left(15); n.appen
 int nextMultiple16(int x){return ((std::clamp(x,1,4096)+15)/16)*16;}
 }
 QString normalizedName(const QString& input){
-  QString s=QFileInfo(input).completeBaseName().toUpper().trimmed();
+  // Nomes MIPTEX não são caminhos; preserve pontos e prefixos do GoldSrc.
+  QString s=input.trimmed().toUpper();
   if(s.isEmpty())s="TEXTURA";
-  const bool special=QStringLiteral("{!+-~").contains(s.front());
-  QString out; if(special){out+=s.front();s.remove(0,1);}
-  for(const QChar c:s){if((c.unicode()>='A'&&c.unicode()<='Z')||(c.unicode()>='0'&&c.unicode()<='9')||c=='_')out+=c; else out+='_';}
+  QString out;
+  for(const QChar c:s){
+    if((c.unicode()>='A'&&c.unicode()<='Z')||
+       (c.unicode()>='0'&&c.unicode()<='9')||
+       c=='_'||c=='.'||c=='{'||c=='!'||c=='+'||c=='-'||c=='~')out+=c;
+    else out+='_';
+  }
   return out.left(15);
 }
 Result readWad3(const QString& path){
@@ -87,17 +93,55 @@ bool writeWad3(const QString& path,const QVector<Texture>& textures,QString* err
     }
     const int w=nextMultiple16(t.image.width()),h=nextMultiple16(t.image.height());
     const QImage img=t.image.scaled(w,h,Qt::IgnoreAspectRatio,Qt::FastTransformation).convertToFormat(QImage::Format_RGBA8888);
-    // Paleta fixa RGB332 com 255 reservado para transparência GoldSrc.
-    QByteArray palette(256*3,'\0');
-    for(int i=0;i<255;++i){ palette[i*3]=char(((i>>5)&7)*255/7);palette[i*3+1]=char(((i>>2)&7)*255/7);palette[i*3+2]=char((i&3)*255/3); }
+    // Paleta adaptativa: preserva cores exatas quando há até 255 cores.
+    // Em imagens complexas, seleciona as cores mais frequentes e aproxima
+    // as demais pela menor distância RGB. Índice 255 reservado para alpha.
+    QHash<QRgb,int> frequencies;
+    for(int y=0;y<img.height();++y)for(int x=0;x<img.width();++x){
+      const QColor c=img.pixelColor(x,y);
+      if(name.startsWith('{')&&c.alpha()<128)continue;
+      ++frequencies[qRgb(c.red(),c.green(),c.blue())];
+    }
+    QVector<QPair<QRgb,int>> ranked;
+    ranked.reserve(frequencies.size());
+    for(auto it=frequencies.cbegin();it!=frequencies.cend();++it)
+      ranked.push_back({it.key(),it.value()});
+    std::sort(ranked.begin(),ranked.end(),[](const auto& a,const auto& b){
+      return a.second!=b.second?a.second>b.second:a.first<b.first;
+    });
+    QVector<QRgb> colors;
+    colors.reserve(255);
+    for(int i=0;i<std::min(255,int(ranked.size()));++i)colors.push_back(ranked[i].first);
+    if(colors.isEmpty())colors.push_back(qRgb(0,0,0));
+    QByteArray palette(256*3,'\\0');
+    for(int i=0;i<colors.size();++i){
+      palette[i*3]=char(qRed(colors[i]));
+      palette[i*3+1]=char(qGreen(colors[i]));
+      palette[i*3+2]=char(qBlue(colors[i]));
+    }
+    // Transparência GoldSrc: índice 255, tipicamente azul puro.
     palette[255*3]=0;palette[255*3+1]=0;palette[255*3+2]=char(255);
+    QHash<QRgb,int> colorIndices;
+    for(int i=0;i<colors.size();++i)colorIndices.insert(colors[i],i);
+    auto closest=[&](QRgb color)->int{
+      auto existing=colorIndices.constFind(color);
+      if(existing!=colorIndices.cend())return existing.value();
+      int best=0;int bestDistance=std::numeric_limits<int>::max();
+      for(int i=0;i<colors.size();++i){
+        const int dr=qRed(color)-qRed(colors[i]),dg=qGreen(color)-qGreen(colors[i]),db=qBlue(color)-qBlue(colors[i]);
+        const int d=dr*dr+dg*dg+db*db;
+        if(d<bestDistance){bestDistance=d;best=i;if(d==0)break;}
+      }
+      colorIndices.insert(color,best);
+      return best;
+    };
     QVector<QByteArray> levels;
     for(int level=0;level<4;++level){
       const int lw=w>>level, lh=h>>level; QImage m=img.scaled(lw,lh,Qt::IgnoreAspectRatio,Qt::SmoothTransformation);
       QByteArray pixels;pixels.reserve(lw*lh);
       for(int y=0;y<lh;++y){const uchar* row=m.constScanLine(y);for(int x=0;x<lw;++x){const uchar* p=row+x*4;
         const bool alpha=name.startsWith('{')&&p[3]<128;
-        const int idx=alpha?255:std::min(254,int((p[0]*7/255)<<5 | (p[1]*7/255)<<2 | (p[2]*3/255)));
+        const int idx=alpha?255:closest(qRgb(p[0],p[1],p[2]));
         pixels.append(char(idx));
       }}levels.push_back(pixels);
     }

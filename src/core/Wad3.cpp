@@ -16,7 +16,7 @@ bool span(qsizetype offset, quint64 n, qsizetype size) { return offset>=0 && qui
 void put16(QByteArray& b, quint16 v) { b.append(char(v&255)); b.append(char((v>>8)&255)); }
 void put32(QByteArray& b, quint32 v) { for(int i=0;i<4;++i)b.append(char((v>>(i*8))&255)); }
 void set32(QByteArray& b, qsizetype pos, quint32 v) { for(int i=0;i<4;++i)b[pos+i]=char((v>>(i*8))&255); }
-QByteArray name16(const QString& s){ QByteArray n=s.toLatin1().left(15); n.resize(16);return n; }
+QByteArray name16(const QString& s){ QByteArray n=s.toLatin1().left(15); n.append(QByteArray(16-n.size(), '\0'));return n; }
 int nextMultiple16(int x){return ((std::clamp(x,1,4096)+15)/16)*16;}
 }
 QString normalizedName(const QString& input){

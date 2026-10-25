@@ -1,5 +1,6 @@
 # Build results
 build/
+build-mingw/
 cmake-build-*/
 CMakeFiles/
 CMakeCache.txt

@@ -128,7 +128,7 @@ void MainWindow::exportWad(){if(textures_.isEmpty()){QMessageBox::information(th
  const QString suggested=openedPath_.isEmpty()?"texturas.wad":QFileInfo(openedPath_).absolutePath()+"/texturas_exportadas.wad";
  const QString path=QFileDialog::getSaveFileName(this,"Exportar WAD3",suggested,"Arquivos WAD3 (*.wad)");if(path.isEmpty())return;QString err;
  if(!goldsrc::writeWad3(path,textures_,&err)){QMessageBox::critical(this,"Erro de exportação",err);return;}statusBar()->showMessage("Arquivo WAD3 exportado: "+path);}
-void MainWindow::removeTexture(){int i=list_->currentRow();if(i<0)return;textures_.removeAt(i);refreshList(std::min(i,textures_.size()-1));}
+void MainWindow::removeTexture(){int i=list_->currentRow();if(i<0)return;textures_.removeAt(i);refreshList(std::min(i, static_cast<int>(textures_.size()) - 1));}
 void MainWindow::duplicateTexture(){int i=list_->currentRow();if(i<0)return;auto t=textures_[i];t.name=goldsrc::normalizedName(t.name.left(10)+"_COPY");textures_.insert(i+1,t);refreshList(i+1);}
 void MainWindow::resizeTexture(){int i=list_->currentRow();if(i<0)return;int w=width_->value(),h=height_->value();if(w*h>16777216){QMessageBox::warning(this,"Dimensões inválidas","Imagem grande demais.");return;}textures_[i].image=textures_[i].image.scaled(w,h,Qt::IgnoreAspectRatio,Qt::SmoothTransformation);refreshList(i);}
 void MainWindow::renameTexture(){int i=list_->currentRow();if(i<0)return;textures_[i].name=goldsrc::normalizedName(name_->text());refreshList(i);}

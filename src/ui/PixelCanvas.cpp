@@ -22,8 +22,8 @@ void PixelCanvas::setImage(const QImage& image){
  updateCanvasSize();notifyHistory();
 }
 void PixelCanvas::replaceImage(const QImage& image){
- if(transforming_)cancelTransform();
  if(image.isNull() || drawing_ || image==image_)return;
+ if(transforming_)cancelTransform();
  undo_.push_back(image_.copy());
  if(undo_.size()>HistoryLimit)undo_.removeFirst();
  redo_.clear();image_=image.convertToFormat(QImage::Format_RGBA8888);clearSelection();
@@ -39,10 +39,10 @@ void PixelCanvas::paintEvent(QPaintEvent*){
   if(((x/cell)+(y/cell))%2==0)p.fillRect(x,y,cell,cell,QColor("#292632"));
  p.setRenderHint(QPainter::SmoothPixmapTransform,false);
  p.drawImage(rect(),transforming_?renderTransform():image_);
- if(selectionDrag_!=SelectionDrag::None && !rectangleSelection_){
+ if(selectionDrag_==SelectionDrag::Create){
   p.setPen(QPen(QColor("#c7a3ff"),0,Qt::DashLine));
   p.setBrush(QColor(142,91,220,28));
-  p.drawRect(QRect(start_*zoom_,dragEnd_*zoom_).normalized());
+  p.drawRect(QRect(QPoint(std::min(start_.x(),dragEnd_.x())*zoom_,std::min(start_.y(),dragEnd_.y())*zoom_),QSize((std::abs(start_.x()-dragEnd_.x())+1)*zoom_,(std::abs(start_.y()-dragEnd_.y())+1)*zoom_)).adjusted(0,0,-1,-1));
   p.setBrush(Qt::NoBrush);
  }
  if(!selected_.isEmpty()){
@@ -228,7 +228,8 @@ void PixelCanvas::mouseReleaseEvent(QMouseEvent* event){
   selecting_=false;
   if(selectionDrag_==SelectionDrag::Create){
    const QPoint end=event->position().toPoint()/zoom_;
-   setRectangleSelection(QRect(start_,end).normalized().intersected(image_.rect()));
+   const QPoint bounded(qBound(0,end.x(),image_.width()-1),qBound(0,end.y(),image_.height()-1));
+   setRectangleSelection(QRect(start_,bounded).normalized().intersected(image_.rect()));
   }
   selectionDrag_=SelectionDrag::None;
   update();return;
@@ -312,6 +313,7 @@ QImage PixelCanvas::renderTransform() const{
  QImage out=transformBase_.copy();
  QPainter painter(&out);
  painter.setRenderHint(QPainter::SmoothPixmapTransform,false);
+ painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
  painter.drawImage(transformRect_,transformPatch_);
  return out;
 }

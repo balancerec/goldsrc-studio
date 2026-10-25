@@ -10,6 +10,7 @@ public:
  enum class Tool { Pencil, Eraser, Eyedropper, Fill };
  explicit PixelCanvas(QWidget* parent=nullptr);
  void setImage(const QImage& image);
+ void replaceImage(const QImage& image);
  const QImage& image() const {return image_;}
  void setTool(Tool tool) {tool_=tool;}
  void setColor(const QColor& color) {color_=color;}

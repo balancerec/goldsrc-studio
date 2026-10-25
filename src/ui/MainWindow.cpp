@@ -1,4 +1,8 @@
 #include "MainWindow.h"
+#include "PixelCanvas.h"
+#include <QComboBox>
+#include <QCheckBox>
+#include <QColorDialog>
 #include <QAction>
 #include <QMenuBar>
 #include <QApplication>
@@ -44,10 +48,33 @@ void MainWindow::setupUi(){
  connect(search,&QLineEdit::textChanged,this,[this](const QString& s){for(int i=0;i<list_->count();++i)list_->item(i)->setHidden(!list_->item(i)->text().contains(s,Qt::CaseInsensitive));});
  connect(list_,&QListWidget::currentRowChanged,this,[this](int index){selectTexture(index);});
  auto* central=new QWidget;auto* centerLayout=new QVBoxLayout(central);centerLayout->setContentsMargins(18,18,18,18);
- auto* title=new QLabel("VISUALIZADOR DE TEXTURAS");title->setObjectName("sectionTitle");centerLayout->addWidget(title);
- auto* scroll=new QScrollArea;scroll->setWidgetResizable(true);scroll->setAlignment(Qt::AlignCenter);scroll->setFrameShape(QFrame::NoFrame);
- preview_=new QLabel("Abra um arquivo WAD3 ou importe imagens para começar.");preview_->setMinimumSize(320,320);preview_->setAlignment(Qt::AlignCenter);preview_->setObjectName("previewArea");preview_->setScaledContents(false);
- scroll->setWidget(preview_);centerLayout->addWidget(scroll,1);
+ auto* title=new QLabel("EDITOR DE TEXTURAS");title->setObjectName("sectionTitle");centerLayout->addWidget(title);
+ auto* tools=new QHBoxLayout;
+ auto* mode=new QComboBox;mode->addItems({"Pincel","Borracha","Conta-gotas"});tools->addWidget(mode);
+ colorButton_=new QPushButton("Cor do pincel");tools->addWidget(colorButton_);
+ auto* zoom=new QSpinBox;zoom->setRange(1,32);zoom->setValue(4);zoom->setSuffix("×");zoom->setToolTip("Zoom de 1 a 32 vezes");tools->addWidget(zoom);
+ auto* grid=new QCheckBox("Grade");grid->setChecked(true);tools->addWidget(grid);tools->addStretch();centerLayout->addLayout(tools);
+ auto* scroll=new QScrollArea;scroll->setWidgetResizable(false);scroll->setAlignment(Qt::AlignCenter);scroll->setFrameShape(QFrame::NoFrame);
+ canvas_=new PixelCanvas;canvas_->resize(320,320);scroll->setWidget(canvas_);centerLayout->addWidget(scroll,1);
+ connect(mode,qOverload<int>(&QComboBox::currentIndexChanged),this,[this](int i){canvas_->setTool(static_cast<PixelCanvas::Tool>(i));});
+ connect(zoom,qOverload<int>(&QSpinBox::valueChanged),canvas_,&PixelCanvas::setZoom);
+ connect(grid,&QCheckBox::toggled,canvas_,&PixelCanvas::setGrid);
+ connect(colorButton_,&QPushButton::clicked,this,[this]{
+  QColor c=QColorDialog::getColor(canvas_->color(),this,"Cor do pincel",QColorDialog::ShowAlphaChannel);
+  if(c.isValid())canvas_->setColor(c);
+ });
+ canvas_->colorPicked=[this,mode](const QColor& c){
+  canvas_->setColor(c);mode->setCurrentIndex(0);
+  statusBar()->showMessage(QString("Cor selecionada: %1").arg(c.name(QColor::HexArgb)));
+ };
+ canvas_->imageChanged=[this](const QImage& image) {
+  const int i=list_->currentRow();if(i<0||i>=textures_.size())return;
+  textures_[i].image=image;
+  // Recria apenas a miniatura selecionada, mantendo a posição na lista.
+  if(auto* item=list_->item(i))
+   item->setIcon(QIcon(QPixmap::fromImage(image).scaled(64,64,Qt::KeepAspectRatio,Qt::FastTransformation)));
+  statusBar()->showMessage("Textura modificada — exporte para salvar em WAD3.");
+ };
  summary_=new QLabel("Nenhuma textura carregada");centerLayout->addWidget(summary_);setCentralWidget(central);
  auto* propertiesDock=new QDockWidget("Inspetor",this);propertiesDock->setObjectName("Inspetor");propertiesDock->setAllowedAreas(Qt::RightDockWidgetArea|Qt::LeftDockWidgetArea);
  auto* props=new QWidget;auto* propsLayout=new QVBoxLayout(props);auto* group=new QGroupBox("Propriedades da textura");auto* form=new QFormLayout(group);
@@ -76,7 +103,7 @@ void MainWindow::setDarkTheme(){
  QGroupBox::title{subcontrol-origin:margin;left:12px;padding:0 4px}
  QStatusBar{background:#1b222b;color:#adbdcd}
  QLabel#sectionTitle{font-size:14px;font-weight:700;letter-spacing:2px}
- QLabel#previewArea{background:#1b222b;border:1px solid #344050;border-radius:8px;color:#8899aa}
+ QComboBox,QCheckBox{background:#171d25;color:#e7ebf2;padding:5px}
  QLabel#smallNote{color:#9ba9bb;line-height:1.5}
  )");
 }
@@ -89,9 +116,9 @@ void MainWindow::refreshList(int index){
 void MainWindow::selectTexture(int index){
  updating_=true;const bool valid=index>=0&&index<textures_.size();
  name_->setEnabled(valid);width_->setEnabled(valid);height_->setEnabled(valid);
- if(!valid){preview_->clear();preview_->setText("Importe uma imagem ou abra um arquivo WAD3.");name_->clear();summary_->setText("Nenhuma textura selecionada");updating_=false;return;}
+ if(!valid){canvas_->setImage(QImage());name_->clear();summary_->setText("Nenhuma textura selecionada");updating_=false;return;}
  const auto& t=textures_.at(index);name_->setText(t.name);width_->setValue(t.image.width());height_->setValue(t.image.height());
- const QPixmap px=QPixmap::fromImage(t.image);preview_->setPixmap(px.scaled(640,640,Qt::KeepAspectRatio,Qt::FastTransformation));
+ canvas_->setImage(t.image);
  summary_->setText(QString("%1  •  %2 × %3 px  •  %4 textura(s) no pacote").arg(t.name).arg(t.image.width()).arg(t.image.height()).arg(textures_.size()));updating_=false;
 }
 void MainWindow::openWad(){const QString path=QFileDialog::getOpenFileName(this,"Abrir arquivo WAD3",{},"Arquivos WAD3 (*.wad)");if(path.isEmpty())return;

@@ -8,6 +8,7 @@ class PixelCanvas;
 class QComboBox;
 class QCheckBox;
 class QPushButton;
+class QStackedWidget;
 class QLineEdit;
 class QSpinBox;
 class QGraphicsView;
@@ -20,6 +21,7 @@ private:
  QVector<goldsrc::Texture> textures_;
  QListWidget* list_{};
  PixelCanvas* canvas_{};
+ QStackedWidget* stack_{};
  QPushButton* colorButton_{};
  QLabel* summary_{};
  QLineEdit* name_{};

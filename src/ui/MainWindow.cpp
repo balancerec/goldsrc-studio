@@ -189,6 +189,7 @@ void MainWindow::setupUi(){
  auto* scroll=new QScrollArea;scroll->setObjectName("canvasScroll");scroll->setWidgetResizable(false);scroll->setAlignment(Qt::AlignCenter);scroll->setFrameShape(QFrame::NoFrame);
  canvas_=new PixelCanvas;canvas_->resize(320,320);scroll->setWidget(canvas_);
  scrollArea_=scroll;scroll->viewport()->installEventFilter(this);canvas_->installEventFilter(this);
+ scroll->setAcceptDrops(false);scroll->viewport()->setAcceptDrops(false);canvas_->setAcceptDrops(false);
  scroll->setFocusPolicy(Qt::StrongFocus);
  stack_=new QStackedWidget;stack_->setObjectName("canvasStack");
  auto* empty=new QWidget;empty->setObjectName("emptyPage");

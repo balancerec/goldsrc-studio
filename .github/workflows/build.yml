@@ -2,6 +2,7 @@ name: Compilar e testar
 on:
   push:
   pull_request:
+
 jobs:
   linux:
     runs-on: ubuntu-24.04
@@ -12,6 +13,37 @@ jobs:
       - name: Configurar
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
       - name: Compilar
-        run: cmake --build build
+        run: cmake --build build --parallel 4
       - name: Testar
         run: ctest --test-dir build --output-on-failure
+
+  windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: Preparar compilador MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+      - name: Instalar Qt 6
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          arch: win64_msvc2022_64
+          cache: true
+      - name: Configurar
+        run: cmake -S . -B build-windows -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - name: Compilar
+        run: cmake --build build-windows --parallel 4
+      - name: Testar
+        run: ctest --test-dir build-windows --output-on-failure -C Release
+      - name: Empacotar executável para revisão
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path package | Out-Null
+          Copy-Item build-windows/GoldSrcStudio.exe package/
+          windeployqt --release --no-translations --dir package package/GoldSrcStudio.exe
+      - name: Disponibilizar build de teste
+        uses: actions/upload-artifact@v4
+        with:
+          name: GoldSrcStudio-Windows-MSVC
+          path: package/
+          retention-days: 7

@@ -7,7 +7,7 @@
 
 class PixelCanvas final : public QWidget {
 public:
- enum class Tool { Pencil, Eraser, Eyedropper, Fill };
+ enum class Tool { Pencil, Eraser, Eyedropper, Fill, RectangleSelect, MagicWand };
  explicit PixelCanvas(QWidget* parent=nullptr);
  void setImage(const QImage& image);
  void replaceImage(const QImage& image);
@@ -22,6 +22,10 @@ public:
  bool canRedo() const {return !redo_.isEmpty();}
  void undo();
  void redo();
+ void cropSelection();
+ void eraseSelection();
+ void clearSelection();
+ void setTolerance(int n){tolerance_=qBound(0,n,255);}
  std::function<void(const QImage&)> imageChanged;
  std::function<void(const QColor&)> colorPicked;
  std::function<void(bool,bool)> historyChanged;
@@ -45,6 +49,10 @@ private:
  bool drawing_{false};
  bool changed_{false};
  QImage before_;
+ QVector<quint8> selected_;
+ QPoint start_;
+ bool selecting_=false;
+ int tolerance_=25;
  QVector<QImage> undo_;
  QVector<QImage> redo_;
  static constexpr int HistoryLimit=15;

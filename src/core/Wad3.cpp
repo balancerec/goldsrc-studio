@@ -113,7 +113,7 @@ bool writeWad3(const QString& path,const QVector<Texture>& textures,QString* err
     colors.reserve(255);
     for(int i=0;i<std::min(255,int(ranked.size()));++i)colors.push_back(ranked[i].first);
     if(colors.isEmpty())colors.push_back(qRgb(0,0,0));
-    QByteArray palette(256*3,'\\0');
+    QByteArray palette(256*3,'\0');
     for(int i=0;i<colors.size();++i){
       palette[i*3]=char(qRed(colors[i]));
       palette[i*3+1]=char(qGreen(colors[i]));

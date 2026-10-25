@@ -16,11 +16,13 @@ void PixelCanvas::updateCanvasSize(){
 }
 void PixelCanvas::notifyHistory(){if(historyChanged)historyChanged(canUndo(),canRedo());}
 void PixelCanvas::setImage(const QImage& image){
+ if(transforming_)cancelTransform();
  image_=image.isNull()?QImage():image.convertToFormat(QImage::Format_RGBA8888);
  drawing_=false;changed_=false;before_=QImage();undo_.clear();redo_.clear();clearSelection();
  updateCanvasSize();notifyHistory();
 }
 void PixelCanvas::replaceImage(const QImage& image){
+ if(transforming_)cancelTransform();
  if(image.isNull() || drawing_ || image==image_)return;
  undo_.push_back(image_.copy());
  if(undo_.size()>HistoryLimit)undo_.removeFirst();
@@ -36,7 +38,7 @@ void PixelCanvas::paintEvent(QPaintEvent*){
  for(int y=0;y<height();y+=cell)for(int x=0;x<width();x+=cell)
   if(((x/cell)+(y/cell))%2==0)p.fillRect(x,y,cell,cell,QColor("#292632"));
  p.setRenderHint(QPainter::SmoothPixmapTransform,false);
- p.drawImage(rect(),image_);
+ p.drawImage(rect(),transforming_?renderTransform():image_);
  if(selectionDrag_!=SelectionDrag::None && !rectangleSelection_){
   p.setPen(QPen(QColor("#c7a3ff"),0,Qt::DashLine));
   p.setBrush(QColor(142,91,220,28));
@@ -53,8 +55,8 @@ void PixelCanvas::paintEvent(QPaintEvent*){
    if(y==h-1||!selected_[(y+1)*w+x])p.drawLine(x*zoom_,(y+1)*zoom_,(x+1)*zoom_,(y+1)*zoom_);
   }
  }
- if(rectangleSelection_ && hasSelection()){
-  const QRect bounds=activeRect();
+ if((rectangleSelection_ && hasSelection()) || transforming_){
+  const QRect bounds=transforming_?transformRect_:activeRect();
   if(!bounds.isEmpty()){
    p.setPen(QPen(QColor("#ba8cff"),1,Qt::DashLine));
    p.setBrush(Qt::NoBrush);
@@ -85,11 +87,13 @@ void PixelCanvas::endChange(){
  before_=QImage();changed_=false;
 }
 void PixelCanvas::undo(){
+ if(transforming_)return;
  if(!canUndo()||drawing_)return;
  redo_.push_back(image_.copy());image_=undo_.takeLast();
  update();notifyHistory();if(imageChanged)imageChanged(image_);
 }
 void PixelCanvas::redo(){
+ if(transforming_)return;
  if(!canRedo()||drawing_)return;
  undo_.push_back(image_.copy());image_=redo_.takeLast();
  update();notifyHistory();if(imageChanged)imageChanged(image_);
@@ -133,6 +137,14 @@ void PixelCanvas::apply(const QPoint& position){
 }
 void PixelCanvas::mousePressEvent(QMouseEvent* event){
  if(event->button()!=Qt::LeftButton || image_.isNull())return;
+ if(transforming_){
+  const QPoint pixel=event->position().toPoint()/zoom_;
+  transformHandle_=hitRect(transformRect_,pixel);
+  if(transformHandle_!=SelectionDrag::None){
+   transformDragging_=true;transformDragAnchor_=pixel;transformDragOriginal_=transformRect_;
+  }
+  return;
+ }
  if(tool_==Tool::Eyedropper){apply(event->position().toPoint());return;}
  if(tool_==Tool::MagicWand){
   const QPoint start=event->position().toPoint()/zoom_;
@@ -162,6 +174,23 @@ void PixelCanvas::mousePressEvent(QMouseEvent* event){
  if(tool_==Tool::Fill){drawing_=false;endChange();}
 }
 void PixelCanvas::mouseMoveEvent(QMouseEvent* event){
+ if(transforming_ && transformDragging_ && (event->buttons()&Qt::LeftButton)){
+  const QPoint pixel=event->position().toPoint()/zoom_;
+  const QPoint delta=pixel-transformDragAnchor_;
+  QRect r=transformDragOriginal_;
+  if(transformHandle_==SelectionDrag::Move)r.translate(delta);
+  else {
+   QPoint a=r.topLeft(),b=r.bottomRight();
+   if(transformHandle_==SelectionDrag::ResizeTL)a+=delta;
+   else if(transformHandle_==SelectionDrag::ResizeTR){a.ry()+=delta.y();b.rx()+=delta.x();}
+   else if(transformHandle_==SelectionDrag::ResizeBL){a.rx()+=delta.x();b.ry()+=delta.y();}
+   else if(transformHandle_==SelectionDrag::ResizeBR)b+=delta;
+   r=QRect(a,b).normalized();
+  }
+  transformRect_=r;
+  update();return;
+ }
+
  if(selecting_ && (event->buttons()&Qt::LeftButton)){
   const QPoint pos=event->position().toPoint()/zoom_;
   if(selectionDrag_==SelectionDrag::Create){
@@ -194,6 +223,7 @@ void PixelCanvas::mouseMoveEvent(QMouseEvent* event){
 }
 void PixelCanvas::mouseReleaseEvent(QMouseEvent* event){
  if(event->button()!=Qt::LeftButton)return;
+ if(transforming_){transformDragging_=false;transformHandle_=SelectionDrag::None;return;}
  if(selecting_){
   selecting_=false;
   if(selectionDrag_==SelectionDrag::Create){
@@ -208,6 +238,7 @@ void PixelCanvas::mouseReleaseEvent(QMouseEvent* event){
 }
 
 void PixelCanvas::clearSelection(){
+ if(transforming_)cancelTransform();
  selected_.clear();selecting_=false;rectangleSelection_=false;selectionBounds_=QRect();
  selectionDrag_=SelectionDrag::None;update();
 }
@@ -242,4 +273,61 @@ void PixelCanvas::eraseSelection(){
  QImage result=image_.copy();bool changed=false;int w=result.width();
  for(int y=0;y<result.height();++y)for(int x=0;x<w;++x)if(selected_[y*w+x]&&result.pixelColor(x,y).alpha()){result.setPixelColor(x,y,QColor(0,0,0,0));changed=true;}
  if(changed)replaceImage(result);
+}
+
+PixelCanvas::SelectionDrag PixelCanvas::hitRect(const QRect& rect,const QPoint& p) const{
+ const int radius=std::max(1,6/zoom_);
+ const auto near=[&](const QPoint& a){return std::abs(p.x()-a.x())<=radius && std::abs(p.y()-a.y())<=radius;};
+ if(near(rect.topLeft()))return SelectionDrag::ResizeTL;
+ if(near(rect.topRight()))return SelectionDrag::ResizeTR;
+ if(near(rect.bottomLeft()))return SelectionDrag::ResizeBL;
+ if(near(rect.bottomRight()))return SelectionDrag::ResizeBR;
+ return rect.contains(p)?SelectionDrag::Move:SelectionDrag::None;
+}
+bool PixelCanvas::beginTransform(){
+ if(transforming_||image_.isNull()||selected_.isEmpty())return false;
+ int left=image_.width(),top=image_.height(),right=-1,bottom=-1;
+ for(int y=0;y<image_.height();++y)for(int x=0;x<image_.width();++x)
+  if(selected_[y*image_.width()+x]){
+   left=std::min(left,x);top=std::min(top,y);
+   right=std::max(right,x);bottom=std::max(bottom,y);
+  }
+ if(right<left)return false;
+ const QRect bounds(QPoint(left,top),QPoint(right,bottom));
+ transformBase_=image_.copy();
+ transformPatch_=QImage(bounds.size(),QImage::Format_ARGB32);
+ transformPatch_.fill(Qt::transparent);
+ for(int y=top;y<=bottom;++y)for(int x=left;x<=right;++x)
+  if(selected_[y*image_.width()+x]){
+   transformPatch_.setPixelColor(x-left,y-top,image_.pixelColor(x,y));
+   transformBase_.setPixelColor(x,y,QColor(0,0,0,0));
+  }
+ transformRect_=bounds;transforming_=true;transformDragging_=false;
+ rectangleSelection_=false;selected_.clear();
+ if(transformChanged)transformChanged(true);
+ update();return true;
+}
+QImage PixelCanvas::renderTransform() const{
+ if(!transforming_)return image_;
+ QImage out=transformBase_.copy();
+ QPainter painter(&out);
+ painter.setRenderHint(QPainter::SmoothPixmapTransform,false);
+ painter.drawImage(transformRect_,transformPatch_);
+ return out;
+}
+void PixelCanvas::confirmTransform(){
+ if(!transforming_||transformDragging_)return;
+ QImage result=renderTransform();
+ transforming_=false;transformPatch_=QImage();transformBase_=QImage();
+ transformRect_=QRect();transformHandle_=SelectionDrag::None;
+ if(transformChanged)transformChanged(false);
+ replaceImage(result);
+ update();
+}
+void PixelCanvas::cancelTransform(){
+ if(!transforming_)return;
+ transforming_=false;transformDragging_=false;transformPatch_=QImage();
+ transformBase_=QImage();transformRect_=QRect();transformHandle_=SelectionDrag::None;
+ if(transformChanged)transformChanged(false);
+ update();
 }

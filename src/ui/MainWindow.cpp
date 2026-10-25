@@ -72,9 +72,19 @@ void MainWindow::setupUi(){
  auto* edit=menuBar()->addMenu("&Editar");edit->addAction(undoAction);edit->addAction(redoAction);
  auto* file=menuBar()->addMenu("&Arquivo");file->addAction(open);file->addAction(save);file->addSeparator();file->addAction("Sair",this,&QWidget::close);
  auto* selectionMenu=menuBar()->addMenu("&Seleção");
+ auto* startTransform=selectionMenu->addAction("Mover / transformar pixels selecionados");
+ auto* acceptTransform=selectionMenu->addAction("Confirmar transformação");
+ auto* rejectTransform=selectionMenu->addAction("Cancelar transformação");
+ acceptTransform->setShortcut(QKeySequence(Qt::Key_Return));
+ rejectTransform->setShortcut(QKeySequence(Qt::Key_Escape));
+ acceptTransform->setEnabled(false);rejectTransform->setEnabled(false);
+ selectionMenu->addSeparator();
  auto* cropSel=selectionMenu->addAction("Recortar seleção");
  auto* eraseSel=selectionMenu->addAction("Apagar seleção (transparente)");
  auto* deselect=selectionMenu->addAction("Desmarcar seleção");
+ connect(startTransform,&QAction::triggered,this,[this]{if(!canvas_->beginTransform())statusBar()->showMessage("Selecione uma região antes de transformá-la.");});
+ connect(acceptTransform,&QAction::triggered,this,[this]{canvas_->confirmTransform();});
+ connect(rejectTransform,&QAction::triggered,this,[this]{canvas_->cancelTransform();});
  connect(cropSel,&QAction::triggered,this,[this]{canvas_->cropSelection();});
  connect(eraseSel,&QAction::triggered,this,[this]{canvas_->eraseSelection();});
  connect(deselect,&QAction::triggered,this,[this]{canvas_->clearSelection();});
@@ -207,7 +217,7 @@ void MainWindow::setupUi(){
  cl->addWidget(stage,1);
  auto* footer=new QHBoxLayout;
  summary_=new QLabel("Nenhuma textura carregada");summary_->setObjectName("workspaceFooter");footer->addWidget(summary_);
- footer->addStretch();auto* scaleHint=new QLabel("Ctrl+roda: zoom  •  Botão central: navegar  •  Arraste alças para ajustar seleção");scaleHint->setObjectName("workspaceFooter");footer->addWidget(scaleHint);
+ footer->addStretch();auto* scaleHint=new QLabel("Ctrl+roda: zoom  •  Seleção → Transformar  •  Enter: confirmar  •  Esc: cancelar");scaleHint->setObjectName("workspaceFooter");footer->addWidget(scaleHint);
  cl->addLayout(footer);setCentralWidget(center);
  connect(mode,qOverload<int>(&QComboBox::currentIndexChanged),this,[this](int index){canvas_->setTool(static_cast<PixelCanvas::Tool>(index));});
  connect(zoom,qOverload<int>(&QSpinBox::valueChanged),canvas_,&PixelCanvas::setZoom);
@@ -217,6 +227,11 @@ void MainWindow::setupUi(){
   QColor c=QColorDialog::getColor(canvas_->color(),this,"Escolher cor",QColorDialog::ShowAlphaChannel);
   if(c.isValid()) {canvas_->setColor(c);colorButton_->setStyleSheet(QString("background-color:%1;color:%2;").arg(c.name(),c.lightness()<128?"white":"black"));}
  });
+ canvas_->transformChanged=[startTransform,acceptTransform,rejectTransform,undoAction,redoAction](bool active){
+  startTransform->setEnabled(!active);acceptTransform->setEnabled(active);
+  rejectTransform->setEnabled(active);
+  if(active){undoAction->setEnabled(false);redoAction->setEnabled(false);}
+ };
  canvas_->historyChanged=[undoAction,redoAction](bool undo,bool redo){
   undoAction->setEnabled(undo);redoAction->setEnabled(redo);
  };

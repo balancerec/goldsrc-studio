@@ -234,7 +234,7 @@ void MainWindow::setupUi(){
   redoAction->setEnabled(!active && canvas_->canRedo());
   statusBar()->showMessage(active?"Transformação ativa: arraste os pixels ou as alças; Enter confirma, Esc cancela.":"Transformação encerrada.");
  };
- canvas_->historyChanged=[undoAction,redoAction](bool undo,bool redo){
+ canvas_->historyChanged=[this,undoAction,redoAction](bool undo,bool redo){
   undoAction->setEnabled(undo && !canvas_->transforming());redoAction->setEnabled(redo && !canvas_->transforming());
  };
  canvas_->colorPicked=[this,mode](const QColor& c){canvas_->setColor(c);mode->setCurrentIndex(0);statusBar()->showMessage("Cor capturada: "+c.name(QColor::HexArgb));};

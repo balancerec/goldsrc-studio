@@ -1,0 +1,17 @@
+name: Compilar e testar
+on:
+  push:
+  pull_request:
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Instalar Qt 6
+        run: sudo apt-get update && sudo apt-get install -y qt6-base-dev cmake ninja-build g++
+      - name: Configurar
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - name: Compilar
+        run: cmake --build build
+      - name: Testar
+        run: ctest --test-dir build --output-on-failure

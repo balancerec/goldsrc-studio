@@ -1,5 +1,8 @@
 #include "MainWindow.h"
 #include "PixelCanvas.h"
+#include "core/Spray.h"
+#include <QPainter>
+#include <QFile>
 #include <QComboBox>
 #include <QWheelEvent>
 #include <QMouseEvent>
@@ -46,6 +49,44 @@
 #include <algorithm>
 
 MainWindow::MainWindow(QWidget* parent):QMainWindow(parent){setupUi();setDarkTheme();}
+void MainWindow::sprayDialog(){
+ const int index=list_->currentRow();
+ if(index<0||index>=textures_.size()){QMessageBox::information(this,"Spray CS 1.6","Importe e selecione uma imagem primeiro.");return;}
+ QDialog dialog(this);dialog.setWindowTitle("Spray CS 1.6");QVBoxLayout layout(&dialog);
+ QLabel preview;preview.setMinimumSize(320,320);preview.setAlignment(Qt::AlignCenter);layout.addWidget(&preview);
+ QLabel details;layout.addWidget(&details);
+ QCheckBox conservative("Compatibilidade com servidores limitados a 64×64");layout.addWidget(&conservative);
+ QLabel note("Prévia da paleta exportada • transparência automática\nFeche o CS antes de instalar. Depois abra e reconecte.\nEscolher outro spray nas opções pode substituir este arquivo.\nArquivos somente leitura precisam ser desbloqueados nas propriedades.");note.setWordWrap(true);layout.addWidget(&note);
+ goldsrc::Spray prepared;
+ auto refresh=[&]{
+  prepared=goldsrc::prepareSpray(textures_[index].image,conservative.isChecked());
+  if(!prepared.ok()){details.setText(prepared.error);preview.clear();return;}
+  QImage background(320,320,QImage::Format_RGB32);QPainter painter(&background);
+  for(int y=0;y<320;y+=16)for(int x=0;x<320;x+=16)painter.fillRect(x,y,16,16,((x+y)/16)%2?QColor(95,95,95):QColor(150,150,150));
+  auto image=prepared.preview.scaled(288,288,Qt::KeepAspectRatio,Qt::FastTransformation);
+  painter.drawImage((320-image.width())/2,(320-image.height())/2,image);painter.end();preview.setPixmap(QPixmap::fromImage(background));
+  details.setText(QString("%1 × %2 px • %3 / 20.480 bytes • pronto para exportar").arg(prepared.preview.width()).arg(prepared.preview.height()).arg(prepared.bytes.size()));
+ };
+ connect(&conservative,&QCheckBox::toggled,&dialog,[&]{refresh();});refresh();
+ QPushButton save("Exportar tempdecal.wad"),install("Instalar no CS…"),restore("Restaurar backup…");
+ layout.addWidget(&save);layout.addWidget(&install);layout.addWidget(&restore);
+ connect(&save,&QPushButton::clicked,&dialog,[&]{
+  if(!prepared.ok())return;auto path=QFileDialog::getSaveFileName(&dialog,"Exportar spray","tempdecal.wad","Spray (*.wad)");if(path.isEmpty())return;
+  QString error;if(!goldsrc::saveSpray(path,prepared.bytes,&error))QMessageBox::warning(&dialog,"Falha",error);else details.setText("Spray salvo: "+path);
+ });
+ auto deploy=[&](const QByteArray& bytes){
+  auto directory=QFileDialog::getExistingDirectory(&dialog,"Selecione a pasta cstrike do seu CS");if(directory.isEmpty())return;
+  QString backup,error;
+  if(!goldsrc::installSpray(directory,bytes,&backup,&error))QMessageBox::warning(&dialog,"Instalação não concluída",error);
+  else QMessageBox::information(&dialog,"Spray instalado","Arquivo verificado. Abra o CS e reconecte.\nBackup: "+backup);
+ };
+ connect(&install,&QPushButton::clicked,&dialog,[&]{if(prepared.ok())deploy(prepared.bytes);});
+ connect(&restore,&QPushButton::clicked,&dialog,[&]{
+  auto path=QFileDialog::getOpenFileName(&dialog,"Selecione o tempdecal.wad do backup",{},"Spray (*.wad)");if(path.isEmpty())return;
+  QFile file(path);if(!file.open(QIODevice::ReadOnly)){QMessageBox::warning(&dialog,"Falha",file.errorString());return;}deploy(file.readAll());
+ });
+ QDialogButtonBox buttons(QDialogButtonBox::Close);layout.addWidget(&buttons);connect(&buttons,&QDialogButtonBox::rejected,&dialog,&QDialog::reject);dialog.exec();
+}
 void MainWindow::setupUi(){
  setWindowTitle("GoldSrc Studio  |  Editor profissional WAD3");
  resize(1520,920);setMinimumSize(940,640);
@@ -57,6 +98,7 @@ void MainWindow::setupUi(){
   connect(a,&QAction::triggered,this,callback);return a;};
  auto* open=action("Abrir WAD3",QStyle::SP_DialogOpenButton,[this]{openWad();});open->setShortcut(QKeySequence::Open);
  action("Importar imagens",QStyle::SP_FileIcon,[this]{importImages();});
+ action("Spray CS 1.6",QStyle::SP_DialogSaveButton,[this]{sprayDialog();});
  auto* save=action("Exportar WAD3",QStyle::SP_DialogSaveButton,[this]{exportWad();});save->setShortcut(QKeySequence::Save);
  bar->addSeparator();
  action("Duplicar",QStyle::SP_FileDialogNewFolder,[this]{duplicateTexture();});
@@ -234,7 +276,7 @@ void MainWindow::setupUi(){
   redoAction->setEnabled(!active && canvas_->canRedo());
   statusBar()->showMessage(active?"Transformação ativa: arraste os pixels ou as alças; Enter confirma, Esc cancela.":"Transformação encerrada.");
  };
- canvas_->historyChanged=[undoAction,redoAction](bool undo,bool redo){
+ canvas_->historyChanged=[this,undoAction,redoAction](bool undo,bool redo){
   undoAction->setEnabled(undo && !canvas_->transforming());redoAction->setEnabled(redo && !canvas_->transforming());
  };
  canvas_->colorPicked=[this,mode](const QColor& c){canvas_->setColor(c);mode->setCurrentIndex(0);statusBar()->showMessage("Cor capturada: "+c.name(QColor::HexArgb));};
@@ -336,7 +378,7 @@ void MainWindow::importImages(){
  const QStringList paths=QFileDialog::getOpenFileNames(this,"Importar imagens",{},"Imagens (*.png *.jpg *.jpeg *.bmp)");
  importPaths(paths);
 }
-void MainWindow::importPaths(const QStringList& paths){int added=0;for(const QString& path:paths){QImage img(path);if(img.isNull())continue;textures_.push_back({goldsrc::normalizedName(QFileInfo(path).fileName()),img});++added;}if(added){refreshList(textures_.size()-1);statusBar()->showMessage(QString("%1 imagem(ns) importada(s)").arg(added));}else if(!paths.isEmpty())QMessageBox::warning(this,"Falha","Nenhuma imagem válida foi importada.");}
+void MainWindow::importPaths(const QStringList& paths){int added=0;for(const QString& path:paths){QImage img(path);if(img.isNull())continue;textures_.push_back({goldsrc::normalizedName(QFileInfo(path).completeBaseName()),img});++added;}if(added){refreshList(textures_.size()-1);statusBar()->showMessage(QString("%1 imagem(ns) importada(s)").arg(added));}else if(!paths.isEmpty())QMessageBox::warning(this,"Falha","Nenhuma imagem válida foi importada.");}
 void MainWindow::exportWad(){if(textures_.isEmpty()){QMessageBox::information(this,"Sem texturas","Importe imagens antes de exportar.");return;}
  const QString suggested=openedPath_.isEmpty()?"texturas.wad":QFileInfo(openedPath_).absolutePath()+"/texturas_exportadas.wad";
  const QString path=QFileDialog::getSaveFileName(this,"Exportar WAD3",suggested,"Arquivos WAD3 (*.wad)");if(path.isEmpty())return;QString err;

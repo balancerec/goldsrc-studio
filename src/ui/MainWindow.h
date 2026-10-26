@@ -50,6 +50,7 @@ private:
  void openWad();
  void importImages();
  void exportWad();
+ void sprayDialog();
  void removeTexture();
  void duplicateTexture();
  void resizeTexture();
